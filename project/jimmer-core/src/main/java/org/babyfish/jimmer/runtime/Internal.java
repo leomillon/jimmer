@@ -29,6 +29,20 @@ public class Internal {
         });
     }
 
+    public static Object produce(
+            ImmutableType type,
+            Object base,
+            DraftConsumer<?> block,
+            Consumer<DraftContext> disposer
+    ) {
+        return usingDraftContext((ctx, isRoot) -> {
+            ctx.addDisposer(disposer);
+            Object draft = createDraft(ctx, type, base);
+            modifyDraft(draft, block);
+            return isRoot ? ctx.resolveObject(draft) : draft;
+        });
+    }
+
     public static List<Object> produceList(
             ImmutableType type,
             Collection<?> bases,
@@ -74,7 +88,9 @@ public class Internal {
         ctx = new DraftContext(null);
         DRAFT_CONTEXT_LOCAL.set(ctx);
         try {
-            return block.apply(ctx, true);
+            T result = block.apply(ctx, true);
+            ctx.dispose();
+            return result;
         } finally {
             DRAFT_CONTEXT_LOCAL.remove();
         }

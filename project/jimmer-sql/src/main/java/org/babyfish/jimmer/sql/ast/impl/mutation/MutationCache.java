@@ -6,7 +6,10 @@ import org.babyfish.jimmer.runtime.DraftSpi;
 import org.babyfish.jimmer.runtime.ImmutableSpi;
 import org.babyfish.jimmer.runtime.Internal;
 import org.babyfish.jimmer.sql.JSqlClient;
+import org.babyfish.jimmer.sql.ast.Expression;
+import org.babyfish.jimmer.sql.ast.impl.query.Queries;
 import org.babyfish.jimmer.sql.cache.CacheDisableConfig;
+import org.babyfish.jimmer.sql.runtime.ExecutionPurpose;
 
 import java.sql.Connection;
 import java.util.*;
@@ -39,58 +42,40 @@ class MutationCache {
         return keyObjMap.get(key);
     }
 
-    public ImmutableSpi findById(ImmutableType type, Object id, Connection con) {
-        TypedId typedId = new TypedId(type, id);
-        ImmutableSpi spi = idObjMap.get(typedId);
-        if (spi != null || idObjMap.containsKey(typedId)) {
-            return spi;
-        }
-        spi = (ImmutableSpi) sqlClientWithoutCache
-                .getEntities()
-                .forUpdate()
-                .forConnection(con)
-                .findById(type.getJavaClass(), id);
-        idObjMap.put(typedId, spi);
-        return spi;
-    }
-
     @SuppressWarnings("unchecked")
-    public Map<Object, ImmutableSpi> findByIds(ImmutableType type, Collection<?> ids, Connection con) {
-        if (ids.isEmpty()) {
-            return Collections.emptyMap();
+    public List<ImmutableSpi> loadByIds(ImmutableType type, Collection<Object> ids, Connection con) {
+        if (!(ids instanceof Set<?>)) {
+            ids = new HashSet<>(ids);
         }
-        Map<Object, ImmutableSpi> resultMap = new LinkedHashMap<>((ids.size() * 4 + 2) / 3);
+        List<ImmutableSpi> list = new ArrayList<>(ids.size());
+        Collection<Object> missedIds = new ArrayList<>();
         for (Object id : ids) {
-            TypedId typedId = new TypedId(type, id);
-            ImmutableSpi spi = idObjMap.get(typedId);
-            if (spi != null || idObjMap.containsKey(typedId)) {
-                resultMap.put(id, spi);
+            ImmutableSpi spi = idObjMap.get(new TypedId(type, id));
+            if (spi != null) {
+                list.add(spi);
+            } else {
+                missedIds.add(id);
             }
         }
-        if (resultMap.size() < ids.size()) {
-            List<Object> missedIds = new ArrayList<>(ids.size() - resultMap.size());
-            for (Object id : ids) {
-                if (!resultMap.containsKey(id)) {
-                    missedIds.add(id);
-                }
-            }
-            if (!missedIds.isEmpty()) { // "ids" is not Set
-                Map<Object, ImmutableSpi> loadedMap =
-                        sqlClientWithoutCache.getEntities().findMapByIds(
-                                (Class<ImmutableSpi>) type.getJavaClass(),
-                                missedIds
-                        );
-                for (Object id : missedIds) {
-                    ImmutableSpi spi = loadedMap.get(id);
-                    resultMap.put(id, spi);
-                    idObjMap.put(new TypedId(type, id), spi);
-                }
+        if (!missedIds.isEmpty()) {
+            String idPropName = type.getIdProp().getName();
+            List<ImmutableSpi> rows = Internal.requiresNewDraftContext(ctx -> {
+                List<ImmutableSpi> spiList = (List<ImmutableSpi>)
+                        Queries.createQuery(sqlClientWithoutCache, type, ExecutionPurpose.MUTATE, true, (q, t) -> {
+                            q.where(t.<Expression<Object>>get(idPropName).in(missedIds));
+                            return q.select(t);
+                        }).forUpdate().execute(con);
+                return ctx.resolveList(spiList);
+            });
+            for (ImmutableSpi row : rows) {
+                save(row, false);
+                list.add(row);
             }
         }
-        return resultMap;
+        return list;
     }
 
-    public ImmutableSpi save(ImmutableSpi spi, boolean saved) {
+    public ImmutableSpi save(ImmutableSpi spi, boolean forUserSave) {
 
         ImmutableType type = spi.__type();
         ImmutableProp idProp = type.getIdProp();
@@ -130,7 +115,7 @@ class MutationCache {
             }
         }
 
-        if (saved) {
+        if (forUserSave) {
             savedMap.put(spi, null);
         }
 

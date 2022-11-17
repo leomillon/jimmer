@@ -1,14 +1,11 @@
-package org.babyfish.jimmer.sql.mutation;
+package org.babyfish.jimmer.sql.trigger;
 
-import org.babyfish.jimmer.Immutable;
 import org.babyfish.jimmer.ImmutableObjects;
 import org.babyfish.jimmer.sql.DissociateAction;
 import org.babyfish.jimmer.sql.DraftInterceptor;
 import org.babyfish.jimmer.sql.ast.mutation.AbstractEntitySaveCommand;
 import org.babyfish.jimmer.sql.ast.mutation.AffectedTable;
 import org.babyfish.jimmer.sql.common.AbstractMutationTest;
-import static org.babyfish.jimmer.sql.common.Constants.*;
-
 import org.babyfish.jimmer.sql.meta.UserIdGenerator;
 import org.babyfish.jimmer.sql.model.*;
 import org.babyfish.jimmer.sql.model.inheritance.*;
@@ -18,12 +15,13 @@ import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
 
-public class CascadeSaveTest extends AbstractMutationTest {
+import static org.babyfish.jimmer.sql.common.Constants.*;
+
+public class CascadeSaveWithTriggerTest extends AbstractTriggerTest {
 
     @Test
     public void testCascadeInsertWithManyToOne() {
@@ -43,7 +41,7 @@ public class CascadeSaveTest extends AbstractMutationTest {
                 ctx -> {
                     ctx.statement(it -> {
                         it.sql(
-                                "select tb_1_.ID, tb_1_.NAME " +
+                                "select tb_1_.ID, tb_1_.NAME, tb_1_.WEBSITE, tb_1_.VERSION " +
                                         "from BOOK_STORE as tb_1_ where tb_1_.NAME = ? " +
                                         "for update"
                         );
@@ -55,7 +53,7 @@ public class CascadeSaveTest extends AbstractMutationTest {
                     });
                     ctx.statement(it -> {
                         it.sql(
-                                "select tb_1_.ID, tb_1_.NAME, tb_1_.EDITION " +
+                                "select tb_1_.ID, tb_1_.NAME, tb_1_.EDITION, tb_1_.PRICE, tb_1_.STORE_ID " +
                                         "from BOOK as tb_1_ " +
                                         "where tb_1_.NAME = ? " +
                                         "and tb_1_.EDITION = ? " +
@@ -94,6 +92,45 @@ public class CascadeSaveTest extends AbstractMutationTest {
                     ctx.rowCount(AffectedTable.of(BookStore.class), 1);
                 }
         );
+        assertEvents(
+                "Event{" +
+                        "--->oldEntity=null, " +
+                        "--->newEntity={" +
+                        "--->--->\"id\":\"" + newStoreId + "\"," +
+                        "--->--->\"name\":\"TURING\"," +
+                        "--->--->\"website\":\"http://www.turing.com\"," +
+                        "--->--->\"version\":0" +
+                        "--->}, " +
+                        "--->reason=null" +
+                        "}",
+                "Event{" +
+                        "--->oldEntity=null, " +
+                        "--->newEntity={" +
+                        "--->--->\"id\":\"" + newId + "\"," +
+                        "--->--->\"name\":\"Kotlin in Action\"," +
+                        "--->--->\"edition\":1," +
+                        "--->--->\"price\":40," +
+                        "--->--->\"store\":{" +
+                        "--->--->--->\"id\":\"" + newStoreId + "\"" +
+                        "--->--->}" +
+                        "--->}, " +
+                        "--->reason=null" +
+                        "}",
+                "AssociationEvent{" +
+                        "--->prop=org.babyfish.jimmer.sql.model.Book.store, " +
+                        "--->sourceId=" + newId + ", " +
+                        "--->detachedTargetId=null, " +
+                        "--->attachedTargetId=" + newStoreId + ", " +
+                        "--->reason=null" +
+                        "}",
+                "AssociationEvent{" +
+                        "--->prop=org.babyfish.jimmer.sql.model.BookStore.books, " +
+                        "--->sourceId=" + newStoreId + ", " +
+                        "--->detachedTargetId=null, " +
+                        "--->attachedTargetId=" + newId + ", " +
+                        "--->reason=null" +
+                        "}"
+        );
     }
 
     @Test
@@ -110,6 +147,15 @@ public class CascadeSaveTest extends AbstractMutationTest {
                 ctx -> {
                     ctx.statement(it -> {
                         it.sql(
+                                "select tb_1_.ID, tb_1_.NAME, tb_1_.WEBSITE, tb_1_.VERSION " +
+                                        "from BOOK_STORE as tb_1_ " +
+                                        "where tb_1_.ID = ? " +
+                                        "for update"
+                        );
+                        it.variables(oreillyId);
+                    });
+                    ctx.statement(it -> {
+                        it.sql(
                                 "update BOOK_STORE " +
                                         "set WEBSITE = ?, VERSION = VERSION + 1 " +
                                         "where ID = ? and VERSION = ?"
@@ -118,7 +164,7 @@ public class CascadeSaveTest extends AbstractMutationTest {
                     });
                     ctx.statement(it -> {
                         it.sql(
-                                "select tb_1_.ID, tb_1_.NAME, tb_1_.EDITION " +
+                                "select tb_1_.ID, tb_1_.NAME, tb_1_.EDITION, tb_1_.PRICE, tb_1_.STORE_ID " +
                                         "from BOOK as tb_1_ where tb_1_.ID = ? " +
                                         "for update"
                         );
@@ -153,6 +199,41 @@ public class CascadeSaveTest extends AbstractMutationTest {
                     });
                 }
         );
+        assertEvents(
+                "Event{" +
+                        "--->oldEntity={" +
+                        "--->--->\"id\":\"" + oreillyId + "\"," +
+                        "--->--->\"name\":\"O'REILLY\"," +
+                        "--->--->\"website\":null," +
+                        "--->--->\"version\":0" +
+                        "--->}, " +
+                        "--->newEntity={" +
+                        "--->--->\"id\":\"" + oreillyId + "\"," +
+                        "--->--->\"website\":\"http://www.oreilly.com\"," +
+                        "--->--->\"version\":1" +
+                        "--->}, " +
+                        "--->reason=null" +
+                        "}",
+                "Event{" +
+                        "--->oldEntity={" +
+                        "--->--->\"id\":\"" + learningGraphQLId1 + "\"," +
+                        "--->--->\"name\":\"Learning GraphQL\"," +
+                        "--->--->\"edition\":1," +
+                        "--->--->\"price\":50.00," +
+                        "--->--->\"store\":{" +
+                        "--->--->--->\"id\":\"" + oreillyId + "\"" +
+                        "--->--->}" +
+                        "--->}, " +
+                        "--->newEntity={" +
+                        "--->--->\"id\":\"" + learningGraphQLId1 + "\"," +
+                        "--->--->\"price\":40," +
+                        "--->--->\"store\":{" +
+                        "--->--->--->\"id\":\"" + oreillyId + "\"" +
+                        "--->--->}" +
+                        "--->}, " +
+                        "--->reason=null" +
+                        "}"
+        );
     }
 
     @Test
@@ -179,7 +260,7 @@ public class CascadeSaveTest extends AbstractMutationTest {
                 ctx -> {
                     ctx.statement(it -> {
                         it.sql(
-                                "select tb_1_.ID, tb_1_.NAME " +
+                                "select tb_1_.ID, tb_1_.NAME, tb_1_.WEBSITE, tb_1_.VERSION " +
                                         "from BOOK_STORE as tb_1_ " +
                                         "where tb_1_.NAME = ? " +
                                         "for update"
@@ -192,7 +273,7 @@ public class CascadeSaveTest extends AbstractMutationTest {
                     });
                     ctx.statement(it -> {
                         it.sql(
-                                "select tb_1_.ID, tb_1_.NAME, tb_1_.EDITION " +
+                                "select tb_1_.ID, tb_1_.NAME, tb_1_.EDITION, tb_1_.PRICE, tb_1_.STORE_ID " +
                                         "from BOOK as tb_1_ " +
                                         "where tb_1_.NAME = ? and tb_1_.EDITION = ? " +
                                         "for update"
@@ -205,7 +286,7 @@ public class CascadeSaveTest extends AbstractMutationTest {
                     });
                     ctx.statement(it -> {
                         it.sql(
-                                "select tb_1_.ID, tb_1_.NAME, tb_1_.EDITION " +
+                                "select tb_1_.ID, tb_1_.NAME, tb_1_.EDITION, tb_1_.PRICE, tb_1_.STORE_ID " +
                                         "from BOOK as tb_1_ " +
                                         "where tb_1_.NAME = ? and tb_1_.EDITION = ? " +
                                         "for update"
@@ -254,6 +335,71 @@ public class CascadeSaveTest extends AbstractMutationTest {
                     ctx.rowCount(AffectedTable.of(BookStore.class), 1);
                 }
         );
+        assertEvents(
+                "Event{" +
+                        "--->oldEntity=null, " +
+                        "--->newEntity={" +
+                        "--->--->\"id\":\"" + newId + "\"," +
+                        "--->--->\"name\":\"TURING\"," +
+                        "--->--->\"version\":0" +
+                        "--->}, " +
+                        "--->reason=null" +
+                        "}",
+                "Event{" +
+                        "--->oldEntity=null, " +
+                        "--->newEntity={" +
+                        "--->--->\"id\":\"4749d255-2745-4f6b-99ae-61aa8fd463e0\"," +
+                        "--->--->\"name\":\"SQL Cookbook\"," +
+                        "--->--->\"edition\":1," +
+                        "--->--->\"price\":50," +
+                        "--->--->\"store\":{" +
+                        "--->--->--->\"id\":\"" + newId + "\"" +
+                        "--->--->}" +
+                        "--->}, " +
+                        "--->reason=null" +
+                        "}",
+                "AssociationEvent{" +
+                        "--->prop=org.babyfish.jimmer.sql.model.Book.store, " +
+                        "--->sourceId=4749d255-2745-4f6b-99ae-61aa8fd463e0, " +
+                        "--->detachedTargetId=null, " +
+                        "--->attachedTargetId=" + newId + ", " +
+                        "--->reason=null" +
+                        "}",
+                "AssociationEvent{" +
+                        "--->prop=org.babyfish.jimmer.sql.model.BookStore.books, " +
+                        "--->sourceId=" + newId + ", " +
+                        "--->detachedTargetId=null, " +
+                        "--->attachedTargetId=4749d255-2745-4f6b-99ae-61aa8fd463e0, " +
+                        "--->reason=null" +
+                        "}",
+                "Event{" +
+                        "--->oldEntity=null, " +
+                        "--->newEntity={" +
+                        "--->--->\"id\":\"4f351857-6cbc-4aad-ac3a-140a20034a3b\"," +
+                        "--->--->\"name\":\"Learning SQL\"," +
+                        "--->--->\"edition\":1," +
+                        "--->--->\"price\":40," +
+                        "--->--->\"store\":{" +
+                        "--->--->--->\"id\":\"" + newId + "\"" +
+                        "--->--->}" +
+                        "--->}, " +
+                        "--->reason=null" +
+                        "}",
+                "AssociationEvent{" +
+                        "--->prop=org.babyfish.jimmer.sql.model.Book.store, " +
+                        "--->sourceId=4f351857-6cbc-4aad-ac3a-140a20034a3b, " +
+                        "--->detachedTargetId=null, " +
+                        "--->attachedTargetId=" + newId + ", " +
+                        "--->reason=null" +
+                        "}",
+                "AssociationEvent{" +
+                        "--->prop=org.babyfish.jimmer.sql.model.BookStore.books, " +
+                        "--->sourceId=" + newId + ", " +
+                        "--->detachedTargetId=null, " +
+                        "--->attachedTargetId=4f351857-6cbc-4aad-ac3a-140a20034a3b, " +
+                        "--->reason=null" +
+                        "}"
+        );
     }
 
     @Test
@@ -280,7 +426,7 @@ public class CascadeSaveTest extends AbstractMutationTest {
                 ctx -> {
                     ctx.statement(it -> {
                         it.sql(
-                                "select tb_1_.ID, tb_1_.NAME " +
+                                "select tb_1_.ID, tb_1_.NAME, tb_1_.WEBSITE, tb_1_.VERSION " +
                                         "from BOOK_STORE as tb_1_ " +
                                         "where tb_1_.NAME = ? " +
                                         "for update"
@@ -293,7 +439,7 @@ public class CascadeSaveTest extends AbstractMutationTest {
                     });
                     ctx.statement(it -> {
                         it.sql(
-                                "select tb_1_.ID, tb_1_.NAME, tb_1_.EDITION " +
+                                "select tb_1_.ID, tb_1_.NAME, tb_1_.EDITION, tb_1_.PRICE, tb_1_.STORE_ID " +
                                         "from BOOK as tb_1_ " +
                                         "where tb_1_.NAME = ? and tb_1_.EDITION = ? " +
                                         "for update"
@@ -306,7 +452,7 @@ public class CascadeSaveTest extends AbstractMutationTest {
                     });
                     ctx.statement(it -> {
                         it.sql(
-                                "select tb_1_.ID, tb_1_.NAME, tb_1_.EDITION " +
+                                "select tb_1_.ID, tb_1_.NAME, tb_1_.EDITION, tb_1_.PRICE, tb_1_.STORE_ID " +
                                         "from BOOK as tb_1_ " +
                                         "where tb_1_.NAME = ? and tb_1_.EDITION = ? " +
                                         "for update"
@@ -318,8 +464,26 @@ public class CascadeSaveTest extends AbstractMutationTest {
                         it.variables(new BigDecimal(42), oreillyId, graphQLInActionId3);
                     });
                     ctx.statement(it -> {
-                        it.sql("update BOOK set STORE_ID = null where STORE_ID = ? and ID not in(?, ?)");
+                        it.sql(
+                                "select tb_1_.ID, tb_1_.NAME, tb_1_.EDITION, tb_1_.PRICE, tb_1_.STORE_ID " +
+                                        "from BOOK as tb_1_ " +
+                                        "where tb_1_.STORE_ID = ? " +
+                                        "and tb_1_.ID not in (?, ?)"
+                        );
                         it.variables(oreillyId, learningGraphQLId3, graphQLInActionId3);
+                    });
+                    ctx.statement(it -> {
+                        it.sql("update BOOK set STORE_ID = null where ID in(?, ?, ?, ?, ?, ?, ?, ?)");
+                        it.unorderedVariables(
+                                learningGraphQLId1,
+                                learningGraphQLId2,
+                                effectiveTypeScriptId1,
+                                effectiveTypeScriptId2,
+                                effectiveTypeScriptId3,
+                                programmingTypeScriptId1,
+                                programmingTypeScriptId2,
+                                programmingTypeScriptId3
+                        );
                     });
                     ctx.entity(it -> {
                         it.original(
@@ -358,6 +522,349 @@ public class CascadeSaveTest extends AbstractMutationTest {
                     ctx.rowCount(AffectedTable.of(BookStore.class), 1);
                 }
         );
+        assertEvents(
+                "Event{" +
+                        "--->oldEntity={" +
+                        "--->--->\"id\":\"" + oreillyId + "\"," +
+                        "--->--->\"name\":\"O'REILLY\"," +
+                        "--->--->\"website\":null," +
+                        "--->--->\"version\":0" +
+                        "--->}, " +
+                        "--->newEntity={" +
+                        "--->--->\"id\":\"" + oreillyId + "\"," +
+                        "--->--->\"name\":\"O'REILLY\"," +
+                        "--->--->\"version\":1" +
+                        "--->}, " +
+                        "--->reason=null" +
+                        "}",
+                "Event{" +
+                        "--->oldEntity={" +
+                        "--->--->\"id\":\"" + learningGraphQLId3 + "\"," +
+                        "--->--->\"name\":\"Learning GraphQL\"," +
+                        "--->--->\"edition\":3," +
+                        "--->--->\"price\":51.00," +
+                        "--->--->\"store\":{" +
+                        "--->--->--->\"id\":\"" + oreillyId + "\"" +
+                        "--->--->}" +
+                        "--->}, " +
+                        "--->newEntity={" +
+                        "--->--->\"id\":\"" + learningGraphQLId3 + "\"," +
+                        "--->--->\"name\":\"Learning GraphQL\"," +
+                        "--->--->\"edition\":3," +
+                        "--->--->\"price\":45," +
+                        "--->--->\"store\":{" +
+                        "--->--->--->\"id\":\"" + oreillyId + "\"" +
+                        "--->--->}" +
+                        "--->}, " +
+                        "--->reason=null" +
+                        "}",
+                "Event{" +
+                        "--->oldEntity={" +
+                        "--->--->\"id\":\"" + graphQLInActionId3 + "\"," +
+                        "--->--->\"name\":\"GraphQL in Action\"," +
+                        "--->--->\"edition\":3," +
+                        "--->--->\"price\":80.00," +
+                        "--->--->\"store\":{" +
+                        "--->--->--->\"id\":\"" + manningId + "\"" +
+                        "--->--->}" +
+                        "--->}, " +
+                        "--->newEntity={" +
+                        "--->--->\"id\":\"" + graphQLInActionId3 + "\"," +
+                        "--->--->\"name\":\"GraphQL in Action\"," +
+                        "--->--->\"edition\":3," +
+                        "--->--->\"price\":42," +
+                        "--->--->\"store\":{" +
+                        "--->--->--->\"id\":\"" + oreillyId + "\"" +
+                        "--->--->}" +
+                        "--->}, " +
+                        "--->reason=null" +
+                        "}",
+                "AssociationEvent{" +
+                        "--->prop=org.babyfish.jimmer.sql.model.Book.store, " +
+                        "--->sourceId=" + graphQLInActionId3 + ", " +
+                        "--->detachedTargetId=" + manningId + ", " +
+                        "--->attachedTargetId=" + oreillyId + ", " +
+                        "--->reason=null" +
+                        "}",
+                "AssociationEvent{" +
+                        "--->prop=org.babyfish.jimmer.sql.model.BookStore.books, " +
+                        "--->sourceId=" + manningId + ", " +
+                        "--->detachedTargetId=" + graphQLInActionId3 + ", " +
+                        "--->attachedTargetId=null, " +
+                        "--->reason=null" +
+                        "}",
+                "AssociationEvent{" +
+                        "--->prop=org.babyfish.jimmer.sql.model.BookStore.books, " +
+                        "--->sourceId=" + oreillyId + ", " +
+                        "--->detachedTargetId=null, " +
+                        "--->attachedTargetId=" + graphQLInActionId3 + ", " +
+                        "--->reason=null" +
+                        "}",
+                "Event{" +
+                        "--->oldEntity={" +
+                        "--->--->\"id\":\"" + learningGraphQLId1 + "\"," +
+                        "--->--->\"name\":\"Learning GraphQL\"," +
+                        "--->--->\"edition\":1," +
+                        "--->--->\"price\":50.00," +
+                        "--->--->\"store\":{" +
+                        "--->--->--->\"id\":\"" + oreillyId + "\"" +
+                        "--->--->}" +
+                        "--->}, " +
+                        "--->newEntity={" +
+                        "--->--->\"id\":\"" + learningGraphQLId1 + "\"," +
+                        "--->--->\"name\":\"Learning GraphQL\"," +
+                        "--->--->\"edition\":1," +
+                        "--->--->\"price\":50.00," +
+                        "--->--->\"store\":null" +
+                        "--->}, " +
+                        "--->reason=null" +
+                        "}",
+                "AssociationEvent{" +
+                        "--->prop=org.babyfish.jimmer.sql.model.Book.store, " +
+                        "--->sourceId=" + learningGraphQLId1 + ", " +
+                        "--->detachedTargetId=" + oreillyId + ", " +
+                        "--->attachedTargetId=null, " +
+                        "--->reason=null" +
+                        "}",
+                "AssociationEvent{" +
+                        "--->prop=org.babyfish.jimmer.sql.model.BookStore.books, " +
+                        "--->sourceId=" + oreillyId + ", " +
+                        "--->detachedTargetId=" + learningGraphQLId1 + ", " +
+                        "--->attachedTargetId=null, " +
+                        "--->reason=null" +
+                        "}",
+                "Event{" +
+                        "--->oldEntity={" +
+                        "--->--->\"id\":\"" + learningGraphQLId2 + "\"," +
+                        "--->--->\"name\":\"Learning GraphQL\"," +
+                        "--->--->\"edition\":2," +
+                        "--->--->\"price\":55.00," +
+                        "--->--->\"store\":{" +
+                        "--->--->--->\"id\":\"" + oreillyId + "\"" +
+                        "--->--->}" +
+                        "--->}, " +
+                        "--->newEntity={" +
+                        "--->--->\"id\":\"" + learningGraphQLId2 + "\"," +
+                        "--->--->\"name\":\"Learning GraphQL\"," +
+                        "--->--->\"edition\":2," +
+                        "--->--->\"price\":55.00," +
+                        "--->--->\"store\":null" +
+                        "--->}, " +
+                        "--->reason=null" +
+                        "}",
+                "AssociationEvent{" +
+                        "--->prop=org.babyfish.jimmer.sql.model.Book.store, " +
+                        "--->sourceId=" + learningGraphQLId2 + ", " +
+                        "--->detachedTargetId=" + oreillyId + ", " +
+                        "--->attachedTargetId=null, " +
+                        "--->reason=null" +
+                        "}",
+                "AssociationEvent{" +
+                        "--->prop=org.babyfish.jimmer.sql.model.BookStore.books, " +
+                        "--->sourceId=" + oreillyId + ", " +
+                        "--->detachedTargetId=" + learningGraphQLId2 + ", " +
+                        "--->attachedTargetId=null, " +
+                        "--->reason=null" +
+                        "}",
+                "Event{" +
+                        "--->oldEntity={" +
+                        "--->--->\"id\":\"" + effectiveTypeScriptId1 + "\"," +
+                        "--->--->\"name\":\"Effective TypeScript\"," +
+                        "--->--->\"edition\":1," +
+                        "--->--->\"price\":73.00," +
+                        "--->--->\"store\":{" +
+                        "--->--->--->\"id\":\"" + oreillyId + "\"" +
+                        "--->--->}" +
+                        "--->}, " +
+                        "--->newEntity={" +
+                        "--->--->\"id\":\"" + effectiveTypeScriptId1 + "\"," +
+                        "--->--->\"name\":\"Effective TypeScript\"," +
+                        "--->--->\"edition\":1," +
+                        "--->--->\"price\":73.00," +
+                        "--->--->\"store\":null" +
+                        "--->}, " +
+                        "--->reason=null" +
+                        "}",
+                "AssociationEvent{" +
+                        "--->prop=org.babyfish.jimmer.sql.model.Book.store, " +
+                        "--->sourceId=" + effectiveTypeScriptId1 + ", " +
+                        "--->detachedTargetId=" + oreillyId + ", " +
+                        "--->attachedTargetId=null, " +
+                        "--->reason=null" +
+                        "}",
+                "AssociationEvent{" +
+                        "--->prop=org.babyfish.jimmer.sql.model.BookStore.books, " +
+                        "--->sourceId=" + oreillyId + ", " +
+                        "--->detachedTargetId=" + effectiveTypeScriptId1 + ", " +
+                        "--->attachedTargetId=null, " +
+                        "--->reason=null" +
+                        "}",
+                "Event{" +
+                        "--->oldEntity={" +
+                        "--->--->\"id\":\"" + effectiveTypeScriptId2 + "\"," +
+                        "--->--->\"name\":\"Effective TypeScript\"," +
+                        "--->--->\"edition\":2," +
+                        "--->--->\"price\":69.00," +
+                        "--->--->\"store\":{" +
+                        "--->--->--->\"id\":\"" + oreillyId + "\"" +
+                        "--->--->}" +
+                        "--->}, " +
+                        "--->newEntity={" +
+                        "--->--->\"id\":\"" + effectiveTypeScriptId2 + "\"," +
+                        "--->--->\"name\":\"Effective TypeScript\"," +
+                        "--->--->\"edition\":2," +
+                        "--->--->\"price\":69.00," +
+                        "--->--->\"store\":null" +
+                        "--->}, " +
+                        "--->reason=null" +
+                        "}",
+                "AssociationEvent{" +
+                        "--->prop=org.babyfish.jimmer.sql.model.Book.store, " +
+                        "--->sourceId=" + effectiveTypeScriptId2 + ", " +
+                        "--->detachedTargetId=" + oreillyId + ", " +
+                        "--->attachedTargetId=null, " +
+                        "--->reason=null" +
+                        "}",
+                "AssociationEvent{" +
+                        "--->prop=org.babyfish.jimmer.sql.model.BookStore.books, " +
+                        "--->sourceId=" + oreillyId + ", " +
+                        "--->detachedTargetId=" + effectiveTypeScriptId2 + ", " +
+                        "--->attachedTargetId=null, " +
+                        "--->reason=null" +
+                        "}",
+                "Event{" +
+                        "--->oldEntity={" +
+                        "--->--->\"id\":\"" + effectiveTypeScriptId3 + "\"," +
+                        "--->--->\"name\":\"Effective TypeScript\"," +
+                        "--->--->\"edition\":3," +
+                        "--->--->\"price\":88.00," +
+                        "--->--->\"store\":{" +
+                        "--->--->--->\"id\":\"" + oreillyId + "\"" +
+                        "--->--->}" +
+                        "--->}, " +
+                        "--->newEntity={" +
+                        "--->--->\"id\":\"" + effectiveTypeScriptId3 + "\"," +
+                        "--->--->\"name\":\"Effective TypeScript\"," +
+                        "--->--->\"edition\":3," +
+                        "--->--->\"price\":88.00," +
+                        "--->--->\"store\":null" +
+                        "--->}, " +
+                        "--->reason=null" +
+                        "}",
+                "AssociationEvent{" +
+                        "--->prop=org.babyfish.jimmer.sql.model.Book.store, " +
+                        "--->sourceId=" + effectiveTypeScriptId3 + ", " +
+                        "--->detachedTargetId=" + oreillyId + ", " +
+                        "--->attachedTargetId=null, " +
+                        "--->reason=null" +
+                        "}",
+                "AssociationEvent{" +
+                        "--->prop=org.babyfish.jimmer.sql.model.BookStore.books, " +
+                        "--->sourceId=" + oreillyId + ", " +
+                        "--->detachedTargetId=" + effectiveTypeScriptId3 + ", " +
+                        "--->attachedTargetId=null, " +
+                        "--->reason=null" +
+                        "}",
+                "Event{" +
+                        "--->oldEntity={" +
+                        "--->--->\"id\":\"" + programmingTypeScriptId1 + "\"," +
+                        "--->--->\"name\":\"Programming TypeScript\"," +
+                        "--->--->\"edition\":1," +
+                        "--->--->\"price\":47.50," +
+                        "--->--->\"store\":{" +
+                        "--->--->--->\"id\":\"" + oreillyId + "\"" +
+                        "--->--->}" +
+                        "--->}, " +
+                        "--->newEntity={" +
+                        "--->--->\"id\":\"" + programmingTypeScriptId1 + "\"," +
+                        "--->--->\"name\":\"Programming TypeScript\"," +
+                        "--->--->\"edition\":1," +
+                        "--->--->\"price\":47.50," +
+                        "--->--->\"store\":null" +
+                        "--->}, " +
+                        "--->reason=null" +
+                        "}",
+                "AssociationEvent{" +
+                        "--->prop=org.babyfish.jimmer.sql.model.Book.store, " +
+                        "--->sourceId=" + programmingTypeScriptId1 + ", " +
+                        "--->detachedTargetId=" + oreillyId + ", " +
+                        "--->attachedTargetId=null, " +
+                        "--->reason=null" +
+                        "}",
+                "AssociationEvent{" +
+                        "--->prop=org.babyfish.jimmer.sql.model.BookStore.books, " +
+                        "--->sourceId=" + oreillyId + ", " +
+                        "--->detachedTargetId=" + programmingTypeScriptId1 + ", " +
+                        "--->attachedTargetId=null, " +
+                        "--->reason=null" +
+                        "}",
+                "Event{" +
+                        "--->oldEntity={" +
+                        "--->--->\"id\":\"" + programmingTypeScriptId2 + "\"," +
+                        "--->--->\"name\":\"Programming TypeScript\"," +
+                        "--->--->\"edition\":2," +
+                        "--->--->\"price\":45.00," +
+                        "--->--->\"store\":{" +
+                        "--->--->--->\"id\":\"" + oreillyId + "\"" +
+                        "--->--->}" +
+                        "--->}, " +
+                        "--->newEntity={" +
+                        "--->--->\"id\":\"" + programmingTypeScriptId2 + "\"," +
+                        "--->--->\"name\":\"Programming TypeScript\"," +
+                        "--->--->\"edition\":2," +
+                        "--->--->\"price\":45.00," +
+                        "--->--->\"store\":null" +
+                        "--->}, " +
+                        "--->reason=null" +
+                        "}",
+                "AssociationEvent{" +
+                        "--->prop=org.babyfish.jimmer.sql.model.Book.store, " +
+                        "--->sourceId=" + programmingTypeScriptId2 + ", " +
+                        "--->detachedTargetId=" + oreillyId + ", " +
+                        "--->attachedTargetId=null, " +
+                        "--->reason=null" +
+                        "}",
+                "AssociationEvent{" +
+                        "--->prop=org.babyfish.jimmer.sql.model.BookStore.books, " +
+                        "--->sourceId=" + oreillyId + ", " +
+                        "--->detachedTargetId=" + programmingTypeScriptId2 + ", " +
+                        "--->attachedTargetId=null, " +
+                        "--->reason=null" +
+                        "}",
+                "Event{" +
+                        "--->oldEntity={" +
+                        "--->--->\"id\":\"" + programmingTypeScriptId3 + "\"," +
+                        "--->--->\"name\":\"Programming TypeScript\"," +
+                        "--->--->\"edition\":3," +
+                        "--->--->\"price\":48.00," +
+                        "--->--->\"store\":{" +
+                        "--->--->--->\"id\":\"" + oreillyId + "\"" +
+                        "--->--->}" +
+                        "--->}, " +
+                        "--->newEntity={" +
+                        "--->--->\"id\":\"" + programmingTypeScriptId3 + "\"," +
+                        "--->--->\"name\":\"Programming TypeScript\"," +
+                        "--->--->\"edition\":3," +
+                        "--->--->\"price\":48.00," +
+                        "--->--->\"store\":null" +
+                        "--->}, " +
+                        "--->reason=null" +
+                        "}",
+                "AssociationEvent{" +
+                        "--->prop=org.babyfish.jimmer.sql.model.Book.store, " +
+                        "--->sourceId=" + programmingTypeScriptId3 + ", " +
+                        "--->detachedTargetId=" + oreillyId + ", " +
+                        "--->attachedTargetId=null, " +
+                        "--->reason=null" +
+                        "}",
+                "AssociationEvent{" +
+                        "--->prop=org.babyfish.jimmer.sql.model.BookStore.books, " +
+                        "--->sourceId=" + oreillyId + ", " +
+                        "--->detachedTargetId=" + programmingTypeScriptId3 + ", " +
+                        "--->attachedTargetId=null, " +
+                        "--->reason=null" +
+                        "}"
+        );
     }
 
     @Test
@@ -386,7 +893,7 @@ public class CascadeSaveTest extends AbstractMutationTest {
                 ctx -> {
                     ctx.statement(it -> {
                         it.sql(
-                                "select tb_1_.ID, tb_1_.NAME, tb_1_.EDITION " +
+                                "select tb_1_.ID, tb_1_.NAME, tb_1_.EDITION, tb_1_.PRICE, tb_1_.STORE_ID " +
                                         "from BOOK as tb_1_ " +
                                         "where tb_1_.NAME = ? and tb_1_.EDITION = ? " +
                                         "for update"
@@ -399,7 +906,7 @@ public class CascadeSaveTest extends AbstractMutationTest {
                     });
                     ctx.statement(it -> {
                         it.sql(
-                                "select tb_1_.ID, tb_1_.FIRST_NAME, tb_1_.LAST_NAME " +
+                                "select tb_1_.ID, tb_1_.FIRST_NAME, tb_1_.LAST_NAME, tb_1_.GENDER " +
                                         "from AUTHOR as tb_1_ " +
                                         "where tb_1_.FIRST_NAME = ? and tb_1_.LAST_NAME = ? " +
                                         "for update"
@@ -412,7 +919,7 @@ public class CascadeSaveTest extends AbstractMutationTest {
                     });
                     ctx.statement(it -> {
                         it.sql(
-                                "select tb_1_.ID, tb_1_.FIRST_NAME, tb_1_.LAST_NAME " +
+                                "select tb_1_.ID, tb_1_.FIRST_NAME, tb_1_.LAST_NAME, tb_1_.GENDER " +
                                         "from AUTHOR as tb_1_ " +
                                         "where tb_1_.FIRST_NAME = ? and tb_1_.LAST_NAME = ? " +
                                         "for update"
@@ -460,6 +967,66 @@ public class CascadeSaveTest extends AbstractMutationTest {
                     });
                 }
         );
+        assertEvents(
+                "Event{" +
+                        "--->oldEntity=null, " +
+                        "--->newEntity={" +
+                        "--->--->\"id\":\"" + newId + "\"," +
+                        "--->--->\"name\":\"Kotlin in Action\"," +
+                        "--->--->\"edition\":1," +
+                        "--->--->\"price\":49" +
+                        "--->}, " +
+                        "--->reason=null" +
+                        "}",
+                "Event{" +
+                        "--->oldEntity=null, " +
+                        "--->newEntity={" +
+                        "--->--->\"id\":\"4749d255-2745-4f6b-99ae-61aa8fd463e0\"," +
+                        "--->--->\"firstName\":\"Andrey\"," +
+                        "--->--->\"lastName\":\"Breslav\"," +
+                        "--->--->\"gender\":\"MALE\"" +
+                        "--->}, " +
+                        "--->reason=null" +
+                        "}",
+                "Event{" +
+                        "--->oldEntity=null, " +
+                        "--->newEntity={" +
+                        "--->--->\"id\":\"4f351857-6cbc-4aad-ac3a-140a20034a3b\"," +
+                        "--->--->\"firstName\":\"Pierre-Yves\"," +
+                        "--->--->\"lastName\":\"Saumont\"," +
+                        "--->--->\"gender\":\"MALE\"" +
+                        "--->}, " +
+                        "--->reason=null" +
+                        "}",
+                "AssociationEvent{" +
+                        "--->prop=org.babyfish.jimmer.sql.model.Book.authors, " +
+                        "--->sourceId=" + newId + ", " +
+                        "--->detachedTargetId=null, " +
+                        "--->attachedTargetId=4749d255-2745-4f6b-99ae-61aa8fd463e0, " +
+                        "--->reason=null" +
+                        "}",
+                "AssociationEvent{" +
+                        "--->prop=org.babyfish.jimmer.sql.model.Author.books, " +
+                        "--->sourceId=4749d255-2745-4f6b-99ae-61aa8fd463e0, " +
+                        "--->detachedTargetId=null, " +
+                        "--->attachedTargetId=" + newId + ", " +
+                        "--->reason=null" +
+                        "}",
+                "AssociationEvent{" +
+                        "--->prop=org.babyfish.jimmer.sql.model.Book.authors, " +
+                        "--->sourceId=" + newId + ", " +
+                        "--->detachedTargetId=null, " +
+                        "--->attachedTargetId=4f351857-6cbc-4aad-ac3a-140a20034a3b, " +
+                        "--->reason=null" +
+                        "}",
+                "AssociationEvent{" +
+                        "--->prop=org.babyfish.jimmer.sql.model.Author.books, " +
+                        "--->sourceId=4f351857-6cbc-4aad-ac3a-140a20034a3b, " +
+                        "--->detachedTargetId=null, " +
+                        "--->attachedTargetId=" + newId + ", " +
+                        "--->reason=null" +
+                        "}"
+        );
     }
 
     @Test
@@ -479,7 +1046,7 @@ public class CascadeSaveTest extends AbstractMutationTest {
                 ctx -> {
                     ctx.statement(it -> {
                         it.sql(
-                                "select tb_1_.ID, tb_1_.NAME, tb_1_.EDITION " +
+                                "select tb_1_.ID, tb_1_.NAME, tb_1_.EDITION, tb_1_.PRICE, tb_1_.STORE_ID " +
                                         "from BOOK as tb_1_ " +
                                         "where tb_1_.NAME = ? and tb_1_.EDITION = ? " +
                                         "for update"
@@ -492,7 +1059,7 @@ public class CascadeSaveTest extends AbstractMutationTest {
                     });
                     ctx.statement(it -> {
                         it.sql(
-                                "select tb_1_.ID, tb_1_.FIRST_NAME, tb_1_.LAST_NAME " +
+                                "select tb_1_.ID, tb_1_.FIRST_NAME, tb_1_.LAST_NAME, tb_1_.GENDER " +
                                         "from AUTHOR as tb_1_ " +
                                         "where tb_1_.FIRST_NAME = ? and tb_1_.LAST_NAME = ? " +
                                         "for update"
@@ -505,7 +1072,7 @@ public class CascadeSaveTest extends AbstractMutationTest {
                     });
                     ctx.statement(it -> {
                         it.sql(
-                                "select tb_1_.ID, tb_1_.FIRST_NAME, tb_1_.LAST_NAME " +
+                                "select tb_1_.ID, tb_1_.FIRST_NAME, tb_1_.LAST_NAME, tb_1_.GENDER " +
                                         "from AUTHOR as tb_1_ " +
                                         "where tb_1_.FIRST_NAME = ? and tb_1_.LAST_NAME = ? " +
                                         "for update"
@@ -557,6 +1124,112 @@ public class CascadeSaveTest extends AbstractMutationTest {
                     ctx.rowCount(AffectedTable.of(BookProps.AUTHORS), 4);
                 }
         );
+        assertEvents(
+                "Event{" +
+                        "--->oldEntity={" +
+                        "--->--->\"id\":\"" + learningGraphQLId3 + "\"," +
+                        "--->--->\"name\":\"Learning GraphQL\"," +
+                        "--->--->\"edition\":3," +
+                        "--->--->\"price\":51.00," +
+                        "--->--->\"store\":{" +
+                        "--->--->--->\"id\":\"" + oreillyId + "\"" +
+                        "--->--->}" +
+                        "--->}, " +
+                        "--->newEntity={" +
+                        "--->--->\"id\":\"" + learningGraphQLId3 + "\"," +
+                        "--->--->\"name\":\"Learning GraphQL\"," +
+                        "--->--->\"edition\":3," +
+                        "--->--->\"price\":49" +
+                        "--->}, " +
+                        "--->reason=null" +
+                        "}",
+                "Event{" +
+                        "--->oldEntity={" +
+                        "--->--->\"id\":\"" + danId + "\"," +
+                        "--->--->\"firstName\":\"Dan\"," +
+                        "--->--->\"lastName\":\"Vanderkam\"," +
+                        "--->--->\"gender\":\"MALE\"" +
+                        "--->}, " +
+                        "--->newEntity={" +
+                        "--->--->\"id\":\"" + danId + "\"," +
+                        "--->--->\"firstName\":\"Dan\"," +
+                        "--->--->\"lastName\":\"Vanderkam\"," +
+                        "--->--->\"gender\":\"FEMALE\"" +
+                        "--->}, " +
+                        "--->reason=null" +
+                        "}",
+                "Event{" +
+                        "--->oldEntity={" +
+                        "--->--->\"id\":\"" + borisId + "\"," +
+                        "--->--->\"firstName\":\"Boris\"," +
+                        "--->--->\"lastName\":\"Cherny\"," +
+                        "--->--->\"gender\":\"MALE\"" +
+                        "--->}, " +
+                        "--->newEntity={" +
+                        "--->--->\"id\":\"" + borisId + "\"," +
+                        "--->--->\"firstName\":\"Boris\"," +
+                        "--->--->\"lastName\":\"Cherny\"," +
+                        "--->--->\"gender\":\"FEMALE\"" +
+                        "--->}, " +
+                        "--->reason=null" +
+                        "}",
+                "AssociationEvent{" +
+                        "--->prop=org.babyfish.jimmer.sql.model.Book.authors, " +
+                        "--->sourceId=" + learningGraphQLId3 + ", " +
+                        "--->detachedTargetId=" + alexId + ", " +
+                        "--->attachedTargetId=null, " +
+                        "--->reason=null" +
+                        "}",
+                "AssociationEvent{" +
+                        "--->prop=org.babyfish.jimmer.sql.model.Author.books, " +
+                        "--->sourceId=" + alexId + ", " +
+                        "--->detachedTargetId=" + learningGraphQLId3 + ", " +
+                        "--->attachedTargetId=null, " +
+                        "--->reason=null" +
+                        "}",
+                "AssociationEvent{" +
+                        "--->prop=org.babyfish.jimmer.sql.model.Book.authors, " +
+                        "--->sourceId=" + learningGraphQLId3 + ", " +
+                        "--->detachedTargetId=" + eveId + ", " +
+                        "--->attachedTargetId=null, " +
+                        "--->reason=null" +
+                        "}",
+                "AssociationEvent{" +
+                        "--->prop=org.babyfish.jimmer.sql.model.Author.books, " +
+                        "--->sourceId=" + eveId + ", " +
+                        "--->detachedTargetId=" + learningGraphQLId3 + ", " +
+                        "--->attachedTargetId=null, " +
+                        "--->reason=null" +
+                        "}",
+                "AssociationEvent{" +
+                        "--->prop=org.babyfish.jimmer.sql.model.Book.authors, " +
+                        "--->sourceId=" + learningGraphQLId3 + ", " +
+                        "--->detachedTargetId=null, " +
+                        "--->attachedTargetId=" + danId + ", " +
+                        "--->reason=null" +
+                        "}",
+                "AssociationEvent{" +
+                        "--->prop=org.babyfish.jimmer.sql.model.Author.books, " +
+                        "--->sourceId=" + danId + ", " +
+                        "--->detachedTargetId=null, " +
+                        "--->attachedTargetId=" + learningGraphQLId3 + ", " +
+                        "--->reason=null" +
+                        "}",
+                "AssociationEvent{" +
+                        "--->prop=org.babyfish.jimmer.sql.model.Book.authors, " +
+                        "--->sourceId=" + learningGraphQLId3 + ", " +
+                        "--->detachedTargetId=null, " +
+                        "--->attachedTargetId=" + borisId + ", " +
+                        "--->reason=null" +
+                        "}",
+                "AssociationEvent{" +
+                        "--->prop=org.babyfish.jimmer.sql.model.Author.books, " +
+                        "--->sourceId=" + borisId + ", " +
+                        "--->detachedTargetId=null, " +
+                        "--->attachedTargetId=" + learningGraphQLId3 + ", " +
+                        "--->reason=null" +
+                        "}"
+        );
     }
 
     @Test
@@ -585,7 +1258,7 @@ public class CascadeSaveTest extends AbstractMutationTest {
                 ctx -> {
                     ctx.statement(it -> {
                         it.sql(
-                                "select tb_1_.ID, tb_1_.FIRST_NAME, tb_1_.LAST_NAME " +
+                                "select tb_1_.ID, tb_1_.FIRST_NAME, tb_1_.LAST_NAME, tb_1_.GENDER " +
                                         "from AUTHOR as tb_1_ " +
                                         "where tb_1_.FIRST_NAME = ? and tb_1_.LAST_NAME = ? " +
                                         "for update"
@@ -598,7 +1271,7 @@ public class CascadeSaveTest extends AbstractMutationTest {
                     });
                     ctx.statement(it -> {
                         it.sql(
-                                "select tb_1_.ID, tb_1_.NAME, tb_1_.EDITION " +
+                                "select tb_1_.ID, tb_1_.NAME, tb_1_.EDITION, tb_1_.PRICE, tb_1_.STORE_ID " +
                                         "from BOOK as tb_1_ " +
                                         "where tb_1_.NAME = ? and tb_1_.EDITION = ? " +
                                         "for update"
@@ -613,7 +1286,7 @@ public class CascadeSaveTest extends AbstractMutationTest {
                     });
                     ctx.statement(it -> {
                         it.sql(
-                                "select tb_1_.ID, tb_1_.NAME, tb_1_.EDITION " +
+                                "select tb_1_.ID, tb_1_.NAME, tb_1_.EDITION, tb_1_.PRICE, tb_1_.STORE_ID " +
                                         "from BOOK as tb_1_ " +
                                         "where tb_1_.NAME = ? and tb_1_.EDITION = ? " +
                                         "for update"
@@ -659,6 +1332,66 @@ public class CascadeSaveTest extends AbstractMutationTest {
                     });
                 }
         );
+        assertEvents(
+                "Event{" +
+                        "--->oldEntity=null, " +
+                        "--->newEntity={" +
+                        "--->--->\"id\":\"" + newId + "\"," +
+                        "--->--->\"firstName\":\"Jim\"," +
+                        "--->--->\"lastName\":\"Green\"," +
+                        "--->--->\"gender\":\"MALE\"" +
+                        "--->}, " +
+                        "--->reason=null" +
+                        "}",
+                "Event{" +
+                        "--->oldEntity=null, " +
+                        "--->newEntity={" +
+                        "--->--->\"id\":\"4749d255-2745-4f6b-99ae-61aa8fd463e0\"," +
+                        "--->--->\"name\":\"Learning SQL\"," +
+                        "--->--->\"edition\":1," +
+                        "--->--->\"price\":30" +
+                        "--->}, " +
+                        "--->reason=null" +
+                        "}",
+                "Event{" +
+                        "--->oldEntity=null, " +
+                        "--->newEntity={" +
+                        "--->--->\"id\":\"4f351857-6cbc-4aad-ac3a-140a20034a3b\"," +
+                        "--->--->\"name\":\"SQL Cookbook\"," +
+                        "--->--->\"edition\":1," +
+                        "--->--->\"price\":40" +
+                        "--->}, " +
+                        "--->reason=null" +
+                        "}",
+                "AssociationEvent{" +
+                        "--->prop=org.babyfish.jimmer.sql.model.Book.authors, " +
+                        "--->sourceId=4749d255-2745-4f6b-99ae-61aa8fd463e0, " +
+                        "--->detachedTargetId=null, " +
+                        "--->attachedTargetId=" + newId + ", " +
+                        "--->reason=null" +
+                        "}",
+                "AssociationEvent{" +
+                        "--->prop=org.babyfish.jimmer.sql.model.Author.books, " +
+                        "--->sourceId=" + newId + ", " +
+                        "--->detachedTargetId=null, " +
+                        "--->attachedTargetId=4749d255-2745-4f6b-99ae-61aa8fd463e0, " +
+                        "--->reason=null" +
+                        "}",
+                "AssociationEvent{" +
+                        "--->prop=org.babyfish.jimmer.sql.model.Book.authors, " +
+                        "--->sourceId=4f351857-6cbc-4aad-ac3a-140a20034a3b, " +
+                        "--->detachedTargetId=null, " +
+                        "--->attachedTargetId=" + newId + ", " +
+                        "--->reason=null" +
+                        "}",
+                "AssociationEvent{" +
+                        "--->prop=org.babyfish.jimmer.sql.model.Author.books, " +
+                        "--->sourceId=" + newId + ", " +
+                        "--->detachedTargetId=null, " +
+                        "--->attachedTargetId=4f351857-6cbc-4aad-ac3a-140a20034a3b, " +
+                        "--->reason=null" +
+                        "}"
+        );
     }
 
     @Test
@@ -678,7 +1411,7 @@ public class CascadeSaveTest extends AbstractMutationTest {
                 ctx -> {
                     ctx.statement(it -> {
                         it.sql(
-                                "select tb_1_.ID, tb_1_.FIRST_NAME, tb_1_.LAST_NAME " +
+                                "select tb_1_.ID, tb_1_.FIRST_NAME, tb_1_.LAST_NAME, tb_1_.GENDER " +
                                         "from AUTHOR as tb_1_ " +
                                         "where tb_1_.FIRST_NAME = ? and tb_1_.LAST_NAME = ? " +
                                         "for update"
@@ -691,7 +1424,7 @@ public class CascadeSaveTest extends AbstractMutationTest {
                     });
                     ctx.statement(it -> {
                         it.sql(
-                                "select tb_1_.ID, tb_1_.NAME, tb_1_.EDITION " +
+                                "select tb_1_.ID, tb_1_.NAME, tb_1_.EDITION, tb_1_.PRICE, tb_1_.STORE_ID " +
                                         "from BOOK as tb_1_ " +
                                         "where tb_1_.NAME = ? and tb_1_.EDITION = ? " +
                                         "for update"
@@ -704,7 +1437,7 @@ public class CascadeSaveTest extends AbstractMutationTest {
                     });
                     ctx.statement(it -> {
                         it.sql(
-                                "select tb_1_.ID, tb_1_.NAME, tb_1_.EDITION " +
+                                "select tb_1_.ID, tb_1_.NAME, tb_1_.EDITION, tb_1_.PRICE, tb_1_.STORE_ID " +
                                         "from BOOK as tb_1_ " +
                                         "where tb_1_.NAME = ? and tb_1_.EDITION = ? " +
                                         "for update"
@@ -760,6 +1493,101 @@ public class CascadeSaveTest extends AbstractMutationTest {
                     ctx.rowCount(AffectedTable.of(AuthorProps.BOOKS), 3);
                 }
         );
+        assertEvents(
+                "Event{" +
+                        "--->oldEntity={" +
+                        "--->--->\"id\":\"" + eveId + "\"," +
+                        "--->--->\"firstName\":\"Eve\"," +
+                        "--->--->\"lastName\":\"Procello\"," +
+                        "--->--->\"gender\":\"FEMALE\"" +
+                        "--->}, " +
+                        "--->newEntity={" +
+                        "--->--->\"id\":\"" + eveId + "\"," +
+                        "--->--->\"firstName\":\"Eve\"," +
+                        "--->--->\"lastName\":\"Procello\"," +
+                        "--->--->\"gender\":\"FEMALE\"" +
+                        "--->}, " +
+                        "--->reason=null" +
+                        "}",
+                "Event{" +
+                        "--->oldEntity={" +
+                        "--->--->\"id\":\"" + learningGraphQLId3 + "\"," +
+                        "--->--->\"name\":\"Learning GraphQL\"," +
+                        "--->--->\"edition\":3," +
+                        "--->--->\"price\":51.00," +
+                        "--->--->\"store\":{" +
+                        "--->--->--->\"id\":\"" + oreillyId + "\"" +
+                        "--->--->}" +
+                        "--->}, " +
+                        "--->newEntity={" +
+                        "--->--->\"id\":\"" + learningGraphQLId3 + "\"," +
+                        "--->--->\"name\":\"Learning GraphQL\"," +
+                        "--->--->\"edition\":3," +
+                        "--->--->\"price\":35" +
+                        "--->}, " +
+                        "--->reason=null" +
+                        "}",
+                "Event{" +
+                        "--->oldEntity={" +
+                        "--->--->\"id\":\"" + graphQLInActionId3 + "\"," +
+                        "--->--->\"name\":\"GraphQL in Action\"," +
+                        "--->--->\"edition\":3," +
+                        "--->--->\"price\":80.00," +
+                        "--->--->\"store\":{" +
+                        "--->--->--->\"id\":\"" + manningId + "\"" +
+                        "--->--->}" +
+                        "--->}, " +
+                        "--->newEntity={" +
+                        "--->--->\"id\":\"" + graphQLInActionId3 + "\"," +
+                        "--->--->\"name\":\"GraphQL in Action\"," +
+                        "--->--->\"edition\":3," +
+                        "--->--->\"price\":28" +
+                        "--->}, " +
+                        "--->reason=null" +
+                        "}",
+                "AssociationEvent{" +
+                        "--->prop=org.babyfish.jimmer.sql.model.Book.authors, " +
+                        "--->sourceId=" + learningGraphQLId1 + ", " +
+                        "--->detachedTargetId=" + eveId + ", " +
+                        "--->attachedTargetId=null, " +
+                        "--->reason=null" +
+                        "}",
+                "AssociationEvent{" +
+                        "--->prop=org.babyfish.jimmer.sql.model.Author.books, " +
+                        "--->sourceId=" + eveId + ", " +
+                        "--->detachedTargetId=" + learningGraphQLId1 + ", " +
+                        "--->attachedTargetId=null, " +
+                        "--->reason=null" +
+                        "}",
+                "AssociationEvent{" +
+                        "--->prop=org.babyfish.jimmer.sql.model.Book.authors, " +
+                        "--->sourceId=" + learningGraphQLId2 + ", " +
+                        "--->detachedTargetId=" + eveId + ", " +
+                        "--->attachedTargetId=null, " +
+                        "--->reason=null" +
+                        "}",
+                "AssociationEvent{" +
+                        "--->prop=org.babyfish.jimmer.sql.model.Author.books, " +
+                        "--->sourceId=" + eveId + ", " +
+                        "--->detachedTargetId=" + learningGraphQLId2 + ", " +
+                        "--->attachedTargetId=null, " +
+                        "--->reason=null" +
+                        "}",
+                "AssociationEvent{" +
+                        "--->prop=org.babyfish.jimmer.sql.model.Book.authors, " +
+                        "--->sourceId=" + graphQLInActionId3 + ", " +
+                        "--->detachedTargetId=null, " +
+                        "--->attachedTargetId=" + eveId + ", " +
+                        "--->reason=null" +
+                        "}",
+                "AssociationEvent{" +
+                        "--->prop=org.babyfish.jimmer.sql.model.Author.books, " +
+                        "--->sourceId=" + eveId + ", " +
+                        "--->detachedTargetId=null, " +
+                        "--->attachedTargetId=" + graphQLInActionId3 + ", " +
+                        "--->reason=null" +
+                        "}"
+        );
     }
 
     @Test
@@ -784,8 +1612,8 @@ public class CascadeSaveTest extends AbstractMutationTest {
                 ctx -> {
                     ctx.statement(it -> {
                         it.sql(
-                                "select tb_1_.ID, tb_1_.NAME from " +
-                                        "ADMINISTRATOR as tb_1_ " +
+                                "select tb_1_.ID, tb_1_.NAME, tb_1_.DELETED, tb_1_.CREATED_TIME, tb_1_.MODIFIED_TIME " +
+                                        "from ADMINISTRATOR as tb_1_ " +
                                         "where tb_1_.NAME = ? " +
                                         "for update"
                         );
@@ -800,7 +1628,9 @@ public class CascadeSaveTest extends AbstractMutationTest {
                     });
                     ctx.statement(it -> {
                         it.sql(
-                                "select tb_1_.ID, tb_1_.NAME " +
+                                "select " +
+                                        "tb_1_.ID, tb_1_.NAME, tb_1_.DELETED, tb_1_.CREATED_TIME, " +
+                                        "tb_1_.MODIFIED_TIME, tb_1_.EMAIL, tb_1_.WEBSITE, tb_1_.ADMINISTRATOR_ID " +
                                         "from ADMINISTRATOR_METADATA as tb_1_ " +
                                         "where tb_1_.NAME = ? " +
                                         "for update"
@@ -847,6 +1677,49 @@ public class CascadeSaveTest extends AbstractMutationTest {
                     });
                 }
         );
+        assertEvents(
+                "Event{" +
+                        "--->oldEntity=null, " +
+                        "--->newEntity={" +
+                        "--->--->\"name\":\"a_5\"," +
+                        "--->--->\"deleted\":false," +
+                        "--->--->\"createdTime\":\"2022-10-15 16:55:00\"," +
+                        "--->--->\"modifiedTime\":\"2022-10-15 16:55:00\"," +
+                        "--->--->\"id\":5" +
+                        "--->}, " +
+                        "--->reason=null" +
+                        "}",
+                "Event{" +
+                        "--->oldEntity=null, " +
+                        "--->newEntity={" +
+                        "--->--->\"name\":\"am_5\"," +
+                        "--->--->\"deleted\":false," +
+                        "--->--->\"createdTime\":\"2022-10-15 16:55:00\"," +
+                        "--->--->\"modifiedTime\":\"2022-10-15 16:55:00\"," +
+                        "--->--->\"email\":\"email_5\"," +
+                        "--->--->\"website\":\"website_5\"," +
+                        "--->--->\"administrator\":{" +
+                        "--->--->--->\"id\":5" +
+                        "--->--->}," +
+                        "--->--->\"id\":50" +
+                        "--->}, " +
+                        "--->reason=null" +
+                        "}",
+                "AssociationEvent{" +
+                        "--->prop=org.babyfish.jimmer.sql.model.inheritance.AdministratorMetadata.administrator, " +
+                        "--->sourceId=50, " +
+                        "--->detachedTargetId=null, " +
+                        "--->attachedTargetId=5, " +
+                        "--->reason=null" +
+                        "}",
+                "AssociationEvent{" +
+                        "--->prop=org.babyfish.jimmer.sql.model.inheritance.Administrator.metadata, " +
+                        "--->sourceId=5, " +
+                        "--->detachedTargetId=null, " +
+                        "--->attachedTargetId=50, " +
+                        "--->reason=null" +
+                        "}"
+        );
     }
 
     @Test
@@ -869,7 +1742,8 @@ public class CascadeSaveTest extends AbstractMutationTest {
                 ctx -> {
                     ctx.statement(it -> {
                         it.sql(
-                                "select tb_1_.ID, tb_1_.NAME " +
+                                "select tb_1_.ID, tb_1_.NAME, " +
+                                        "tb_1_.DELETED, tb_1_.CREATED_TIME, tb_1_.MODIFIED_TIME " +
                                         "from ADMINISTRATOR as tb_1_ " +
                                         "where tb_1_.NAME = ? " +
                                         "for update"
@@ -886,7 +1760,9 @@ public class CascadeSaveTest extends AbstractMutationTest {
                     });
                     ctx.statement(it -> {
                         it.sql(
-                                "select tb_1_.ID, tb_1_.NAME " +
+                                "select tb_1_.ID, tb_1_.NAME, " +
+                                        "tb_1_.DELETED, tb_1_.CREATED_TIME, tb_1_.MODIFIED_TIME, " +
+                                        "tb_1_.EMAIL, tb_1_.WEBSITE, tb_1_.ADMINISTRATOR_ID " +
                                         "from ADMINISTRATOR_METADATA as tb_1_ " +
                                         "where tb_1_.NAME = ? " +
                                         "for update"
@@ -940,6 +1816,50 @@ public class CascadeSaveTest extends AbstractMutationTest {
                         );
                     });
                 }
+        );
+        assertEvents(
+                "Event{" +
+                        "--->oldEntity={" +
+                        "--->--->\"name\":\"a_4\"," +
+                        "--->--->\"deleted\":true," +
+                        "--->--->\"createdTime\":\"2022-10-03 00:00:00\"," +
+                        "--->--->\"modifiedTime\":\"2022-10-03 00:10:00\"," +
+                        "--->--->\"id\":4" +
+                        "--->}, " +
+                        "--->newEntity={" +
+                        "--->--->\"name\":\"a_4\"," +
+                        "--->--->\"deleted\":false," +
+                        "--->--->\"modifiedTime\":\"2022-10-15 16:55:00\"," +
+                        "--->--->\"id\":4" +
+                        "--->}, " +
+                        "--->reason=null" +
+                        "}",
+                "Event{" +
+                        "--->oldEntity={" +
+                        "--->--->\"name\":\"am_4\"," +
+                        "--->--->\"deleted\":true," +
+                        "--->--->\"createdTime\":\"2022-10-03 00:00:00\"," +
+                        "--->--->\"modifiedTime\":\"2022-10-03 00:10:00\"," +
+                        "--->--->\"email\":\"email_4\"," +
+                        "--->--->\"website\":\"website_4\"," +
+                        "--->--->\"administrator\":{" +
+                        "--->--->--->\"id\":4" +
+                        "--->--->}," +
+                        "--->--->\"id\":40" +
+                        "--->}, " +
+                        "--->newEntity={" +
+                        "--->--->\"name\":\"am_4\"," +
+                        "--->--->\"deleted\":false," +
+                        "--->--->\"modifiedTime\":\"2022-10-15 16:55:00\"," +
+                        "--->--->\"email\":\"email_4+\"," +
+                        "--->--->\"website\":\"website_4+\"," +
+                        "--->--->\"administrator\":{" +
+                        "--->--->--->\"id\":4" +
+                        "--->--->}," +
+                        "--->--->\"id\":40" +
+                        "--->}, " +
+                        "--->reason=null" +
+                        "}"
         );
     }
 
@@ -1034,6 +1954,67 @@ public class CascadeSaveTest extends AbstractMutationTest {
                     });
                 }
         );
+        assertEvents(
+                "Event{" +
+                        "--->oldEntity=null, " +
+                        "--->newEntity={" +
+                        "--->--->\"id\":100," +
+                        "--->--->\"name\":\"Parent\"," +
+                        "--->--->\"parent\":null" +
+                        "--->}, " +
+                        "--->reason=null" +
+                        "}",
+                "Event{" +
+                        "--->oldEntity=null, " +
+                        "--->newEntity={" +
+                        "--->--->\"id\":101," +
+                        "--->--->\"name\":\"Child-1\"," +
+                        "--->--->\"parent\":{" +
+                        "--->--->--->\"id\":100" +
+                        "--->--->}" +
+                        "--->}, " +
+                        "--->reason=null" +
+                        "}",
+                "AssociationEvent{" +
+                        "--->prop=org.babyfish.jimmer.sql.model.TreeNode.parent, " +
+                        "--->sourceId=101, " +
+                        "--->detachedTargetId=null, " +
+                        "--->attachedTargetId=100, " +
+                        "--->reason=null" +
+                        "}",
+                "AssociationEvent{" +
+                        "--->prop=org.babyfish.jimmer.sql.model.TreeNode.childNodes, " +
+                        "--->sourceId=100, " +
+                        "--->detachedTargetId=null, " +
+                        "--->attachedTargetId=101, " +
+                        "--->reason=null" +
+                        "}",
+                "Event{" +
+                        "--->oldEntity=null, " +
+                        "--->newEntity={" +
+                        "--->--->\"id\":102," +
+                        "--->--->\"name\":\"Child-2\"," +
+                        "--->--->\"parent\":{" +
+                        "--->--->--->\"id\":100" +
+                        "--->--->}" +
+                        "--->}, " +
+                        "--->reason=null" +
+                        "}",
+                "AssociationEvent{" +
+                        "--->prop=org.babyfish.jimmer.sql.model.TreeNode.parent, " +
+                        "--->sourceId=102, " +
+                        "--->detachedTargetId=null, " +
+                        "--->attachedTargetId=100, " +
+                        "--->reason=null" +
+                        "}",
+                "AssociationEvent{" +
+                        "--->prop=org.babyfish.jimmer.sql.model.TreeNode.childNodes, " +
+                        "--->sourceId=100, " +
+                        "--->detachedTargetId=null, " +
+                        "--->attachedTargetId=102, " +
+                        "--->reason=null" +
+                        "}"
+        );
     }
 
     @Test
@@ -1069,7 +2050,7 @@ public class CascadeSaveTest extends AbstractMutationTest {
                 ctx -> {
                     ctx.statement(it -> {
                         it.sql(
-                                "select tb_1_.ID, tb_1_.NAME " +
+                                "select tb_1_.ID, tb_1_.NAME, tb_1_.WEBSITE, tb_1_.VERSION " +
                                         "from BOOK_STORE as tb_1_ where tb_1_.ID = ? " +
                                         "for update"
                         );
@@ -1081,7 +2062,7 @@ public class CascadeSaveTest extends AbstractMutationTest {
                     });
                     ctx.statement(it -> {
                         it.sql(
-                                "select tb_1_.ID, tb_1_.NAME, tb_1_.EDITION " +
+                                "select tb_1_.ID, tb_1_.NAME, tb_1_.EDITION, tb_1_.PRICE, tb_1_.STORE_ID " +
                                         "from BOOK as tb_1_ " +
                                         "where tb_1_.NAME = ? and tb_1_.EDITION = ? " +
                                         "for update"
@@ -1095,7 +2076,7 @@ public class CascadeSaveTest extends AbstractMutationTest {
                     });
                     ctx.statement(it -> {
                         it.sql(
-                                "select tb_1_.ID, tb_1_.NAME, tb_1_.EDITION " +
+                                "select tb_1_.ID, tb_1_.NAME, tb_1_.EDITION, tb_1_.PRICE, tb_1_.STORE_ID " +
                                         "from BOOK as tb_1_ " +
                                         "where tb_1_.NAME = ? and tb_1_.EDITION = ? " +
                                         "for update"
@@ -1124,6 +2105,71 @@ public class CascadeSaveTest extends AbstractMutationTest {
                         );
                     });
                 }
+        );
+        assertEvents(
+                "Event{" +
+                        "--->oldEntity=null, " +
+                        "--->newEntity={" +
+                        "--->--->\"id\":\"6057bec2-df8d-48f1-b31e-fdd36861cccb\"," +
+                        "--->--->\"name\":\"TURING\"," +
+                        "--->--->\"version\":0" +
+                        "--->}, " +
+                        "--->reason=null" +
+                        "}",
+                "Event{" +
+                        "--->oldEntity=null, " +
+                        "--->newEntity={" +
+                        "--->--->\"id\":\"e1d34561-17df-4c08-9959-1c6cb33cdafb\"," +
+                        "--->--->\"name\":\"A\"," +
+                        "--->--->\"edition\":1," +
+                        "--->--->\"price\":48," +
+                        "--->--->\"store\":{" +
+                        "--->--->--->\"id\":\"6057bec2-df8d-48f1-b31e-fdd36861cccb\"" +
+                        "--->--->}" +
+                        "--->}, " +
+                        "--->reason=null" +
+                        "}",
+                "AssociationEvent{" +
+                        "--->prop=org.babyfish.jimmer.sql.model.Book.store, " +
+                        "--->sourceId=e1d34561-17df-4c08-9959-1c6cb33cdafb, " +
+                        "--->detachedTargetId=null, " +
+                        "--->attachedTargetId=6057bec2-df8d-48f1-b31e-fdd36861cccb, " +
+                        "--->reason=null" +
+                        "}",
+                "AssociationEvent{" +
+                        "--->prop=org.babyfish.jimmer.sql.model.BookStore.books, " +
+                        "--->sourceId=6057bec2-df8d-48f1-b31e-fdd36861cccb, " +
+                        "--->detachedTargetId=null, " +
+                        "--->attachedTargetId=e1d34561-17df-4c08-9959-1c6cb33cdafb, " +
+                        "--->reason=null" +
+                        "}",
+                "Event{" +
+                        "--->oldEntity=null, " +
+                        "--->newEntity={" +
+                        "--->--->\"id\":\"3d1d7676-5258-41c0-8e21-02110af07e90\"," +
+                        "--->--->\"name\":\"B\"," +
+                        "--->--->\"edition\":1," +
+                        "--->--->\"price\":49," +
+                        "--->--->\"store\":{" +
+                        "--->--->--->\"id\":\"6057bec2-df8d-48f1-b31e-fdd36861cccb\"" +
+                        "--->--->}" +
+                        "--->}, " +
+                        "--->reason=null" +
+                        "}",
+                "AssociationEvent{" +
+                        "--->prop=org.babyfish.jimmer.sql.model.Book.store, " +
+                        "--->sourceId=3d1d7676-5258-41c0-8e21-02110af07e90, " +
+                        "--->detachedTargetId=null, " +
+                        "--->attachedTargetId=6057bec2-df8d-48f1-b31e-fdd36861cccb, " +
+                        "--->reason=null" +
+                        "}",
+                "AssociationEvent{" +
+                        "--->prop=org.babyfish.jimmer.sql.model.BookStore.books, " +
+                        "--->sourceId=6057bec2-df8d-48f1-b31e-fdd36861cccb, " +
+                        "--->detachedTargetId=null, " +
+                        "--->attachedTargetId=3d1d7676-5258-41c0-8e21-02110af07e90, " +
+                        "--->reason=null" +
+                        "}"
         );
     }
 

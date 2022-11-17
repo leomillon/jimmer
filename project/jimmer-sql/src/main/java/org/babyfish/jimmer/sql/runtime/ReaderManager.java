@@ -1,6 +1,5 @@
 package org.babyfish.jimmer.sql.runtime;
 
-import org.apache.commons.lang3.reflect.TypeUtils;
 import org.babyfish.jimmer.meta.ImmutableProp;
 import org.babyfish.jimmer.meta.ImmutableType;
 import org.babyfish.jimmer.meta.ModelException;
@@ -14,9 +13,9 @@ import org.babyfish.jimmer.sql.meta.Column;
 import org.babyfish.jimmer.sql.meta.Storage;
 import org.babyfish.jimmer.util.StaticCache;
 
-import java.lang.reflect.TypeVariable;
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.nio.ByteBuffer;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
@@ -212,8 +211,17 @@ public class ReaderManager {
 
         @Override
         public UUID read(ResultSet rs, Col col) throws SQLException {
-            String str = rs.getString(col.get());
-            return str != null ? UUID.fromString(str) : null;
+            Object obj = rs.getObject(col.get());
+            if (obj == null) {
+                return null;
+            }
+            if (obj instanceof byte[]) {
+                ByteBuffer byteBuffer = ByteBuffer.wrap((byte[]) obj);
+                long high = byteBuffer.getLong();
+                long low = byteBuffer.getLong();
+                return new UUID(high, low);
+            }
+            return UUID.fromString(obj.toString());
         }
     }
 

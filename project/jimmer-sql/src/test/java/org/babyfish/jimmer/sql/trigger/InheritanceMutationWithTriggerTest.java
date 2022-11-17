@@ -1,4 +1,4 @@
-package org.babyfish.jimmer.sql.mutation;
+package org.babyfish.jimmer.sql.trigger;
 
 import org.babyfish.jimmer.ImmutableObjects;
 import org.babyfish.jimmer.sql.DraftInterceptor;
@@ -14,7 +14,7 @@ import org.junit.jupiter.api.Test;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 
-public class InheritanceMutationTest extends AbstractMutationTest {
+public class InheritanceMutationWithTriggerTest extends AbstractTriggerTest {
 
     private static final DateTimeFormatter FORMATTER =
             DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
@@ -71,7 +71,7 @@ public class InheritanceMutationTest extends AbstractMutationTest {
                 ctx -> {
                     ctx.statement(it -> {
                         it.sql(
-                                "select tb_1_.ID, tb_1_.NAME " +
+                                "select tb_1_.ID, tb_1_.NAME, tb_1_.DELETED, tb_1_.CREATED_TIME, tb_1_.MODIFIED_TIME " +
                                         "from ROLE as tb_1_ " +
                                         "where tb_1_.NAME = ? " +
                                         "for update"
@@ -85,7 +85,8 @@ public class InheritanceMutationTest extends AbstractMutationTest {
                     });
                     ctx.statement(it -> {
                         it.sql(
-                                "select tb_1_.ID, tb_1_.NAME " +
+                                "select tb_1_.ID, tb_1_.NAME, tb_1_.DELETED, " +
+                                        "tb_1_.CREATED_TIME, tb_1_.MODIFIED_TIME, tb_1_.ROLE_ID " +
                                         "from PERMISSION as tb_1_ " +
                                         "where tb_1_.NAME = ? " +
                                         "for update"
@@ -99,7 +100,8 @@ public class InheritanceMutationTest extends AbstractMutationTest {
                     });
                     ctx.statement(it -> {
                         it.sql(
-                                "select tb_1_.ID, tb_1_.NAME " +
+                                "select tb_1_.ID, tb_1_.NAME, tb_1_.DELETED, " +
+                                        "tb_1_.CREATED_TIME, tb_1_.MODIFIED_TIME, tb_1_.ROLE_ID " +
                                         "from PERMISSION as tb_1_ " +
                                         "where tb_1_.NAME = ? " +
                                         "for update"
@@ -155,6 +157,75 @@ public class InheritanceMutationTest extends AbstractMutationTest {
                     ctx.rowCount(AffectedTable.of(Permission.class), 2);
                 }
         );
+        assertEvents(
+                "Event{" +
+                        "--->oldEntity=null, " +
+                        "--->newEntity={" +
+                        "--->--->\"name\":\"role\"," +
+                        "--->--->\"deleted\":false," +
+                        "--->--->\"createdTime\":\"2022-10-03 00:00:00\"," +
+                        "--->--->\"modifiedTime\":\"2022-10-03 00:10:00\"," +
+                        "--->--->\"id\":101" +
+                        "--->}, " +
+                        "--->reason=null" +
+                        "}",
+                "Event{" +
+                        "--->oldEntity=null, " +
+                        "--->newEntity={" +
+                        "--->--->\"name\":\"permission_1\"," +
+                        "--->--->\"deleted\":false," +
+                        "--->--->\"createdTime\":\"2022-10-03 00:00:00\"," +
+                        "--->--->\"modifiedTime\":\"2022-10-03 00:10:00\"," +
+                        "--->--->\"role\":{" +
+                        "--->--->--->\"id\":101" +
+                        "--->--->}," +
+                        "--->--->\"id\":101" +
+                        "--->}, " +
+                        "--->reason=null" +
+                        "}",
+                "AssociationEvent{" +
+                        "--->prop=org.babyfish.jimmer.sql.model.inheritance.Permission.role, " +
+                        "--->sourceId=101, " +
+                        "--->detachedTargetId=null, " +
+                        "--->attachedTargetId=101, " +
+                        "--->reason=null" +
+                        "}",
+                "AssociationEvent{" +
+                        "--->prop=org.babyfish.jimmer.sql.model.inheritance.Role.permissions, " +
+                        "--->sourceId=101, " +
+                        "--->detachedTargetId=null, " +
+                        "--->attachedTargetId=101, " +
+                        "--->reason=null" +
+                        "}",
+                "Event{" +
+                        "--->oldEntity=null, " +
+                        "--->newEntity={" +
+                        "--->--->\"name\":\"permission_2\"," +
+                        "--->--->\"deleted\":false," +
+                        "--->--->\"createdTime\":\"2022-10-03 00:00:00\"," +
+                        "--->--->\"modifiedTime\":\"2022-10-03 00:10:00\"," +
+                        "--->--->\"role\":{" +
+                        "--->--->--->\"id\":101" +
+                        "--->--->}," +
+                        "--->--->\"id\":102" +
+                        "--->}, " +
+                        "--->reason=null" +
+                        "}",
+                "AssociationEvent{" +
+                        "--->prop=org.babyfish.jimmer.sql.model.inheritance.Permission.role, " +
+                        "--->sourceId=102, " +
+                        "--->detachedTargetId=null, " +
+                        "--->attachedTargetId=101, " +
+                        "--->reason=null" +
+                        "}",
+                "AssociationEvent{" +
+                        "--->prop=org.babyfish.jimmer.sql.model.inheritance.Role.permissions, " +
+                        "--->sourceId=101, " +
+                        "--->detachedTargetId=null, " +
+                        "--->attachedTargetId=102, " +
+                        "--->reason=null" +
+                        "}"
+        );
     }
 
     @Test
@@ -171,7 +242,7 @@ public class InheritanceMutationTest extends AbstractMutationTest {
                 ctx -> {
                     ctx.statement(it -> {
                         it.sql(
-                                "select tb_1_.ID, tb_1_.NAME " +
+                                "select tb_1_.ID, tb_1_.NAME, tb_1_.DELETED, tb_1_.CREATED_TIME, tb_1_.MODIFIED_TIME " +
                                         "from ROLE as tb_1_ where tb_1_.NAME = ? " +
                                         "for update"
                         );
@@ -184,7 +255,8 @@ public class InheritanceMutationTest extends AbstractMutationTest {
                     });
                     ctx.statement(it -> {
                         it.sql(
-                                "select tb_1_.ID, tb_1_.NAME " +
+                                "select tb_1_.ID, tb_1_.NAME, tb_1_.DELETED, " +
+                                        "tb_1_.CREATED_TIME, tb_1_.MODIFIED_TIME, tb_1_.ROLE_ID " +
                                         "from PERMISSION as tb_1_ " +
                                         "where tb_1_.NAME = ? " +
                                         "for update"
@@ -220,6 +292,47 @@ public class InheritanceMutationTest extends AbstractMutationTest {
                     ctx.rowCount(AffectedTable.of(Role.class), 1);
                     ctx.rowCount(AffectedTable.of(Permission.class), 1);
                 }
+        );
+        assertEvents(
+                "Event{" +
+                        "--->oldEntity=null, " +
+                        "--->newEntity={" +
+                        "--->--->\"name\":\"role\"," +
+                        "--->--->\"deleted\":false," +
+                        "--->--->\"createdTime\":\"2022-10-03 00:00:00\"," +
+                        "--->--->\"modifiedTime\":\"2022-10-03 00:10:00\"," +
+                        "--->--->\"id\":101" +
+                        "--->}, " +
+                        "--->reason=null" +
+                        "}",
+                "Event{" +
+                        "--->oldEntity=null, " +
+                        "--->newEntity={" +
+                        "--->--->\"name\":\"Permission\"," +
+                        "--->--->\"deleted\":false," +
+                        "--->--->\"createdTime\":\"2022-10-03 00:00:00\"," +
+                        "--->--->\"modifiedTime\":\"2022-10-03 00:10:00\"," +
+                        "--->--->\"role\":{" +
+                        "--->--->--->\"id\":101" +
+                        "--->--->}," +
+                        "--->--->\"id\":101" +
+                        "--->}, " +
+                        "--->reason=null" +
+                        "}",
+                "AssociationEvent{" +
+                        "--->prop=org.babyfish.jimmer.sql.model.inheritance.Permission.role, " +
+                        "--->sourceId=101, " +
+                        "--->detachedTargetId=null, " +
+                        "--->attachedTargetId=101, " +
+                        "--->reason=null" +
+                        "}",
+                "AssociationEvent{" +
+                        "--->prop=org.babyfish.jimmer.sql.model.inheritance.Role.permissions, " +
+                        "--->sourceId=101, " +
+                        "--->detachedTargetId=null, " +
+                        "--->attachedTargetId=101, " +
+                        "--->reason=null" +
+                        "}"
         );
     }
 }

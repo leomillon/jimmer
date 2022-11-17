@@ -1,5 +1,6 @@
 package org.babyfish.jimmer.sql;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.babyfish.jimmer.lang.NewChain;
 import org.babyfish.jimmer.lang.OldChain;
 import org.babyfish.jimmer.meta.ImmutableProp;
@@ -12,6 +13,9 @@ import org.babyfish.jimmer.sql.ast.table.spi.TableProxy;
 import org.babyfish.jimmer.sql.cache.CacheConfig;
 import org.babyfish.jimmer.sql.cache.CacheDisableConfig;
 import org.babyfish.jimmer.sql.cache.Caches;
+import org.babyfish.jimmer.sql.event.TriggerType;
+import org.babyfish.jimmer.sql.event.Triggers;
+import org.babyfish.jimmer.sql.event.binlog.BinLog;
 import org.babyfish.jimmer.sql.filter.Filter;
 import org.babyfish.jimmer.sql.filter.FilterConfig;
 import org.babyfish.jimmer.sql.filter.Filters;
@@ -61,7 +65,13 @@ public interface JSqlClient extends SubQueryProvider {
 
     Entities getEntities();
 
+    TriggerType getTriggerType();
+
     Triggers getTriggers();
+
+    Triggers getTriggers(boolean transaction);
+
+    BinLog getBinLog();
 
     Associations getAssociations(TypedProp.Association<?, ?> prop);
 
@@ -132,6 +142,9 @@ public interface JSqlClient extends SubQueryProvider {
         Builder setCaches(Consumer<CacheConfig> block);
 
         @OldChain
+        Builder setTriggerType(TriggerType triggerType);
+
+        @OldChain
         Builder addFilters(Filter<?>... filters);
 
         @OldChain
@@ -151,6 +164,9 @@ public interface JSqlClient extends SubQueryProvider {
 
         @OldChain
         Builder addDraftInterceptors(Collection<DraftInterceptor<?>> interceptors);
+
+        @OldChain
+        Builder setBinLogObjectMapper(ObjectMapper mapper);
 
         JSqlClient build();
     }

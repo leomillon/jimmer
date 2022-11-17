@@ -12,6 +12,7 @@ import java.sql.Connection;
 import java.util.*;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 
 public abstract class AbstractMutationTest extends AbstractTest {
 
@@ -269,9 +270,24 @@ public abstract class AbstractMutationTest extends AbstractTest {
 
         public void unorderedVariables(Object ... values) {
             Assertions.assertEquals(
-                    new HashSet<Object>(Arrays.asList(values)),
-                    new HashSet<>(execution.getVariables()),
-                    "statements[" + index + "].variables."
+                    values.length,
+                    this.execution.getVariables().size(),
+                    "statements[" + index + "].variables"
+            );
+            Assertions.assertEquals(
+                    new HashSet<>(
+                            Arrays.asList(values)
+                                    .stream()
+                                    .map(it -> it instanceof byte[] ? Arrays.toString((byte[])it) : it)
+                                    .collect(Collectors.toList())
+                    ),
+                    new HashSet<>(
+                            execution.getVariables()
+                                    .stream()
+                                    .map(it -> it instanceof byte[] ? Arrays.toString((byte[])it) : it)
+                                    .collect(Collectors.toList())
+                    ),
+                    "statements[" + index + "].variables"
             );
         }
 
