@@ -27,6 +27,10 @@ dependencies {
     testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine")
 }
 
+tasks.withType(JavaCompile::class) {
+    options.compilerArgs.add("-parameters")
+}
+
 tasks.getByName<Test>("test") {
     useJUnitPlatform()
 }
