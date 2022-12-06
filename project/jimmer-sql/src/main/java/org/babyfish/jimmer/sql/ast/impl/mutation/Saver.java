@@ -4,7 +4,6 @@ import org.babyfish.jimmer.Draft;
 import org.babyfish.jimmer.meta.ImmutableProp;
 import org.babyfish.jimmer.meta.ImmutableType;
 import org.babyfish.jimmer.meta.TargetLevel;
-import org.babyfish.jimmer.meta.impl.RedirectedProp;
 import org.babyfish.jimmer.runtime.DraftSpi;
 import org.babyfish.jimmer.runtime.ImmutableSpi;
 import org.babyfish.jimmer.runtime.Internal;
@@ -118,7 +117,7 @@ class Saver {
 
         for (ImmutableProp prop : currentType.getProps().values()) {
             if (prop.isAssociation(TargetLevel.ENTITY) &&
-                    prop.getStorage() instanceof Column == forParent &&
+                    prop.getStorage() instanceof ColumnDefinition == forParent &&
                     currentDraftSpi.__isLoaded(prop.getId())
             ) {
                 ImmutableType targetType = prop.getTargetType();
@@ -129,11 +128,11 @@ class Saver {
 
                 ImmutableProp mappedBy = prop.getMappedBy();
                 ChildTableOperator childTableOperator = null;
-                if (mappedBy != null && mappedBy.getStorage() instanceof Column) {
+                if (mappedBy != null && mappedBy.getStorage() instanceof ColumnDefinition) {
                     childTableOperator = new ChildTableOperator(
                             data.getSqlClient(),
                             con,
-                            RedirectedProp.source(mappedBy, prop.getTargetType()),
+                            mappedBy,
                             cache,
                             trigger
                     );
@@ -347,7 +346,7 @@ class Saver {
         List<ImmutableProp> props = new ArrayList<>();
         List<Object> values = new ArrayList<>();
         for (ImmutableProp prop : draftSpi.__type().getProps().values()) {
-            if (prop.getStorage() instanceof Column && draftSpi.__isLoaded(prop.getId())) {
+            if (prop.getStorage() instanceof ColumnDefinition && draftSpi.__isLoaded(prop.getId())) {
                 props.add(prop);
                 Object value = draftSpi.__get(prop.getId());
                 if (value != null && prop.isReference(TargetLevel.ENTITY)) {
@@ -374,7 +373,7 @@ class Saver {
         for (ImmutableProp prop : props) {
             builder.sql(separator);
             separator = ", ";
-            builder.sql(prop.<Column>getStorage().getName());
+            builder.sql(prop.<ColumnDefinition>getStorage());
         }
         builder.sql(")");
         if (id != null && idGenerator instanceof IdentityIdGenerator) {
@@ -383,7 +382,7 @@ class Saver {
                 builder.sql(" ").sql(overrideIdentityIdSql);
             }
         }
-        builder.sql(" values(");
+        builder.sql(" values").enterTuple();
         separator = "";
         int size = values.size();
         for (int i = 0; i < size; i++) {
@@ -396,7 +395,7 @@ class Saver {
                 builder.nullVariable(props.get(i));
             }
         }
-        builder.sql(")");
+        builder.leaveTuple();
 
         Tuple2<String, List<Object>> sqlResult = builder.build();
         boolean generateKeys = id == null;
@@ -454,7 +453,7 @@ class Saver {
         Integer version = null;
 
         for (ImmutableProp prop : type.getProps().values()) {
-            if (prop.getStorage() instanceof Column && draftSpi.__isLoaded(prop.getId())) {
+            if (prop.getStorage() instanceof ColumnDefinition && draftSpi.__isLoaded(prop.getId())) {
                 if (prop.isVersion()) {
                     version = (Integer) draftSpi.__get(prop.getId());
                 } else if (!prop.isId() && !excludeProps.contains(prop)) {
@@ -492,18 +491,10 @@ class Saver {
         for (int i = 0; i < updatedCount; i++) {
             builder.sql(separator);
             separator = ", ";
-            builder
-                    .sql(updatedProps.get(i).<Column>getStorage().getName())
-                    .sql(" = ");
-            Object updatedValue = updatedValues.get(i);
-            if (updatedValue != null) {
-                builder.variable(updatedValue);
-            } else {
-                builder.nullVariable(updatedProps.get(i));
-            }
+            builder.assignment(updatedProps.get(i), updatedValues.get(i));
         }
         if (version != null) {
-            String versionColumName = type.getVersionProp().<Column>getStorage().getName();
+            String versionColumName = type.getVersionProp().<SingleColumn>getStorage().getName();
             builder
                     .sql(separator)
                     .sql(versionColumName)
@@ -514,13 +505,13 @@ class Saver {
         builder.sql(" where ");
 
         builder.
-                sql(type.getIdProp().<Column>getStorage().getName())
+                sql(null, type.getIdProp().getStorage(), true)
                 .sql(" = ")
                 .variable(draftSpi.__get(type.getIdProp().getId()));
         if (version != null) {
             builder
                     .sql(" and ")
-                    .sql(type.getVersionProp().<Column>getStorage().getName())
+                    .sql(type.getVersionProp().<SingleColumn>getStorage().getName())
                     .sql(" = ")
                     .variable(version);
         }

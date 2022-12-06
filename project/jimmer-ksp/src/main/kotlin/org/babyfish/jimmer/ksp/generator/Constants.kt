@@ -24,7 +24,6 @@ internal const val FETCHER = "Fetcher"
 internal const val FETCHER_DSL = "FetcherDsl"
 
 internal val CLONEABLE_CLASS_NAME = Cloneable::class.asClassName()
-internal val CLONE_NOT_SUPPORTED_EXCEPTION_CLASS_NAME = CloneNotSupportedException::class.asClassName()
 internal val JSON_IGNORE_CLASS_NAME = JsonIgnore::class.asClassName()
 internal val INTERNAL_TYPE_CLASS_NAME = Internal::class.asClassName()
 internal val IMMUTABLE_PROP_CATEGORY_CLASS_NAME = ImmutablePropCategory::class.asClassName()
@@ -89,6 +88,14 @@ internal val K_NULLABLE_PROP_EXPRESSION = ClassName(
     "org.babyfish.jimmer.sql.kt.ast.expression",
     "KNullablePropExpression"
 )
+internal val K_NON_NULL_PROP_EXPRESSION_IMPLEMENTOR = ClassName(
+    "org.babyfish.jimmer.sql.kt.ast.expression.spi",
+    "KNonNullPropExpressionImplementor"
+)
+internal val K_NULLABLE_PROP_EXPRESSION_IMPLEMENTOR = ClassName(
+    "org.babyfish.jimmer.sql.kt.ast.expression.spi",
+    "KNullablePropExpressionImplementor"
+)
 internal val FETCHER_CLASS_NAME = ClassName(
     "org.babyfish.jimmer.sql.fetcher",
     "Fetcher"
@@ -137,16 +144,10 @@ internal val ENTITY_MANAGER_CLASS_NAME =
         "EntityManager"
     )
 
-internal val ID_FULL_NAME = Id::class.qualifiedName
-internal val VERSION_FULL_NAME = Version::class.qualifiedName
 internal const val KEY_FULL_NAME = "org.babyfish.jimmer.sql.Key"
-internal val ONE_TO_ONE_FULL_NAME = OneToOne::class.qualifiedName
-internal val MANY_TO_ONE_FULL_NAME = ManyToOne::class.qualifiedName
-internal val ONE_TO_MANY_FULL_NAME = OneToMany::class.qualifiedName
-internal val MANY_TO_MANY_FULL_NAME = ManyToMany::class.qualifiedName
 internal const val JIMMER_MODULE = "JimmerModule"
 
-internal const val CURRENT_IMPLEMENTOR = "(__modified ?: __base)"
-internal const val CURRENT_IMPL = "(__modified ?: __base.clone()).also { __modified = it }"
+internal const val UNMODIFIED = "(__modified ?: __base)"
+internal const val MODIFIED = "(__modified ?: __base.clone()).also { __modified = it }"
 
 internal const val EMAIL_PATTERN = "^[^@]+@[^@]+\$"

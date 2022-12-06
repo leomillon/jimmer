@@ -6,9 +6,11 @@ import org.babyfish.jimmer.runtime.ImmutableSpi;
 import org.babyfish.jimmer.sql.JoinType;
 import org.babyfish.jimmer.sql.ast.impl.table.TableProxies;
 import org.babyfish.jimmer.sql.ast.table.Table;
+import org.babyfish.jimmer.sql.ast.table.spi.PropExpressionImplementor;
 import org.babyfish.jimmer.sql.ast.table.spi.TableProxy;
 import org.babyfish.jimmer.sql.event.TriggerType;
-import org.babyfish.jimmer.sql.meta.Column;
+import org.babyfish.jimmer.sql.meta.ColumnDefinition;
+import org.babyfish.jimmer.sql.meta.EmbeddedColumns;
 import org.babyfish.jimmer.sql.JSqlClient;
 import org.babyfish.jimmer.sql.ast.Expression;
 import org.babyfish.jimmer.sql.ast.Predicate;
@@ -77,8 +79,8 @@ public class MutableUpdateImpl
                     "Only the primary table can be deleted when transaction trigger is supported"
             );
         }
-        if (!(target.prop.getStorage() instanceof Column)) {
-            throw new IllegalArgumentException("The assigned prop expression must be mapped as column");
+        if (!(target.prop.getStorage() instanceof ColumnDefinition)) {
+            throw new IllegalArgumentException("The assigned prop expression must be mapped by database columns");
         }
         UpdateJoin updateJoin = getSqlClient().getDialect().getUpdateJoin();
         boolean joinedTableUpdatable = updateJoin != null && updateJoin.isJoinedTableUpdatable();
@@ -199,8 +201,6 @@ public class MutableUpdateImpl
             ImmutableSpi row = rowMap.get(changedRow.__get(idPropId));
             if (!row.__equals(changedRow, true)) {
                 trigger.modifyEntityTable(row, changedRow);
-            } else {
-                System.out.println(changedRow + " -> " + row);
             }
         }
         trigger.submit(getSqlClient(), con);
@@ -279,20 +279,17 @@ public class MutableUpdateImpl
                 } else {
                     addComma = true;
                 }
-                builder.sql(table.getAlias()).sql(".").sql(prop.<Column>getStorage().getName());
+                builder.sql(table.getAlias(), prop.getStorage());
             }
             if (ids != null) {
                 builder
                         .sql(" from ")
                         .sql(table.getImmutableType().getTableName())
                         .sql(" as ")
-                        .sql(table.getAlias());
-                builder
-                        .sql(" where ")
                         .sql(table.getAlias())
-                        .sql(".")
-                        .sql(table.getImmutableType().getIdProp().<Column>getStorage().getName())
-                        .sql(" in(");
+                        .sql(" where ")
+                        .sql(table.getAlias(), table.getImmutableType().getIdProp().getStorage(), true)
+                        .sql(" in (");
                 addComma = false;
                 for (Object id : ids) {
                     if (addComma) {
@@ -330,11 +327,8 @@ public class MutableUpdateImpl
     }
 
     private void renderTarget(SqlBuilder builder, Target target, boolean withPrefix) {
-        if (withPrefix) {
-            TableImplementor<?> impl = TableProxies.resolve(target.table, builder.getAstContext());
-            builder.sql(impl.getAlias()).sql(".");
-        }
-        builder.sql(((Column) target.prop.getStorage()).getName());
+        TableImplementor<?> impl = TableProxies.resolve(target.table, builder.getAstContext());
+        impl.renderSelection(target.prop, builder, target.expr.getPartial(), withPrefix);
     }
 
     private void renderTables(SqlBuilder builder) {
@@ -375,12 +369,9 @@ public class MutableUpdateImpl
         String separator = " where ";
         if (ids != null) {
             ImmutableProp idProp = table.getImmutableType().getIdProp();
-            builder
-                    .sql(separator)
-                    .sql(table.getAlias())
-                    .sql(".")
-                    .sql(idProp.<Column>getStorage().getName())
-                    .sql(" in(");
+            builder.sql(separator)
+                    .sql(table.getAlias(), idProp.getStorage(), true)
+                    .sql(" in (");
             boolean addComma = false;
             for (Object id : ids) {
                 if (addComma) {
@@ -404,10 +395,12 @@ public class MutableUpdateImpl
                 child.renderJoinAsFrom(builder, TableImplementor.RenderMode.WHERE_ONLY);
             }
         }
-        Predicate predicate = getPredicate();
-        if (predicate != null) {
-            builder.sql(separator);
-            ((Ast)predicate).renderTo(builder);
+        if (ids == null) {
+            Predicate predicate = getPredicate();
+            if (predicate != null) {
+                builder.sql(separator);
+                ((Ast) predicate).renderTo(builder);
+            }
         }
     }
 
@@ -417,17 +410,25 @@ public class MutableUpdateImpl
 
         ImmutableProp prop;
 
-        PropExpression<?> expr;
+        PropExpressionImplementor<?> expr;
 
         private Target(Table<?> table, ImmutableProp prop, PropExpression<?> expr) {
             this.table = table;
             this.prop = prop;
-            this.expr = expr;
+            this.expr = (PropExpressionImplementor)expr;
         }
 
         static Target of(PropExpression<?> expr) {
-            PropExpressionImpl<?> exprImpl = (PropExpressionImpl<?>) expr;
-            Table<?> targetTable = exprImpl.getTable();
+            PropExpressionImplementor<?> implementor = (PropExpressionImplementor<?>) expr;
+            EmbeddedColumns.Partial partial = implementor.getPartial();
+            if (partial != null && partial.isEmbedded()) {
+                throw new IllegalArgumentException(
+                        "The property \"" +
+                                implementor +
+                                "\" is embedded, it cannot be used as the assignment target of update statement"
+                );
+            }
+            Table<?> targetTable = implementor.getTable();
             Table<?> parent;
             ImmutableProp prop;
             if (targetTable instanceof TableImplementor<?>) {
@@ -437,10 +438,10 @@ public class MutableUpdateImpl
                 parent = ((TableProxy<?>)targetTable).__parent();
                 prop = ((TableProxy<?>)targetTable).__prop();
             }
-            if (parent != null && prop != null && exprImpl.getProp().isId()) {
+            if (parent != null && prop != null && implementor.getProp().isId()) {
                 return new Target(parent, prop, expr);
             } else {
-                return new Target(targetTable, exprImpl.getProp(), expr);
+                return new Target(targetTable, implementor.getProp(), expr);
             }
         }
 

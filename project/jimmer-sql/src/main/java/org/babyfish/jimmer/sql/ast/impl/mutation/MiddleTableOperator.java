@@ -2,6 +2,7 @@ package org.babyfish.jimmer.sql.ast.impl.mutation;
 
 import org.babyfish.jimmer.meta.ImmutableProp;
 import org.babyfish.jimmer.sql.ast.impl.AstContext;
+import org.babyfish.jimmer.sql.meta.EmbeddedColumns;
 import org.babyfish.jimmer.sql.meta.MiddleTable;
 import org.babyfish.jimmer.sql.JSqlClient;
 import org.babyfish.jimmer.sql.ast.Expression;
@@ -75,11 +76,11 @@ class MiddleTableOperator {
         SqlBuilder builder = new SqlBuilder(new AstContext(sqlClient));
         builder
                 .sql("select ")
-                .sql(middleTable.getTargetJoinColumnName())
+                .sql(middleTable.getTargetColumnDefinition())
                 .sql(" from ")
                 .sql(middleTable.getTableName())
                 .sql(" where ")
-                .sql(middleTable.getJoinColumnName())
+                .sql(null, middleTable.getColumnDefinition(), true)
                 .sql(" = ")
                 .variable(id);
         Tuple2<String, List<Object>> sqlResult = builder.build();
@@ -100,23 +101,25 @@ class MiddleTableOperator {
         SqlBuilder builder = new SqlBuilder(new AstContext(sqlClient));
         builder
                 .sql("select ")
-                .sql(middleTable.getJoinColumnName())
+                .sql(middleTable.getColumnDefinition())
                 .sql(", ")
-                .sql(middleTable.getTargetJoinColumnName())
+                .sql(middleTable.getTargetColumnDefinition())
                 .sql(" from ")
                 .sql(middleTable.getTableName())
-                .sql(" where (")
-                .sql(middleTable.getJoinColumnName())
+                .sql(" where ")
+                .enterTuple()
+                .sql(middleTable.getColumnDefinition())
                 .sql(", ")
-                .sql(middleTable.getTargetJoinColumnName())
-                .sql(") in(");
+                .sql(middleTable.getTargetColumnDefinition())
+                .leaveTuple()
+                .sql(" in (");
         while (reader.read()) {
             builder
-                    .sql("(")
+                    .enterTuple()
                     .variable(reader.sourceId())
                     .sql(", ")
                     .variable(reader.targetId())
-                    .sql(")");
+                    .leaveTuple();
             if (reader.isReadable()) {
                 builder.sql(", ");
             }
@@ -140,14 +143,14 @@ class MiddleTableOperator {
         SqlBuilder builder = new SqlBuilder(new AstContext(sqlClient));
         builder
                 .sql("select ")
-                .sql(middleTable.getJoinColumnName())
+                .sql(middleTable.getColumnDefinition())
                 .sql(", ")
-                .sql(middleTable.getTargetJoinColumnName())
+                .sql(middleTable.getTargetColumnDefinition())
                 .sql(" from ")
                 .sql(middleTable.getTableName())
                 .sql(" where ")
-                .sql(middleTable.getJoinColumnName())
-                .sql(" in(");
+                .sql(null, middleTable.getColumnDefinition(), true)
+                .sql(" in (");
         boolean addComma = false;
         for (Object sourceId : sourceIds) {
             if (addComma) {
@@ -195,20 +198,20 @@ class MiddleTableOperator {
                 .sql("insert into ")
                 .sql(middleTable.getTableName())
                 .sql("(")
-                .sql(middleTable.getJoinColumnName())
+                .sql(middleTable.getColumnDefinition())
                 .sql(", ")
-                .sql(middleTable.getTargetJoinColumnName())
+                .sql(middleTable.getTargetColumnDefinition())
                 .sql(") values ");
         String separator = "";
         while (reader.read()) {
             builder.sql(separator);
             separator = ", ";
             builder
-                    .sql("(")
+                    .enterTuple()
                     .variable(reader.sourceId())
                     .sql(", ")
                     .variable(reader.targetId())
-                    .sql(")");
+                    .leaveTuple();
         }
         Tuple2<String, List<Object>> sqlResult = builder.build();
         return sqlClient.getExecutor().execute(
@@ -253,21 +256,23 @@ class MiddleTableOperator {
         builder
                 .sql("delete from ")
                 .sql(middleTable.getTableName())
-                .sql(" where (")
-                .sql(middleTable.getJoinColumnName())
+                .sql(" where ")
+                .enterTuple()
+                .sql(middleTable.getColumnDefinition())
                 .sql(", ")
-                .sql(middleTable.getTargetJoinColumnName())
-                .sql(") in (");
+                .sql(middleTable.getTargetColumnDefinition())
+                .leaveTuple()
+                .sql(" in (");
         String separator = "";
         while (reader.read()) {
             builder.sql(separator);
             separator = ", ";
             builder
-                    .sql("(")
+                    .enterTuple()
                     .variable(reader.sourceId())
                     .sql(", ")
                     .variable(reader.targetId())
-                    .sql(")");
+                    .leaveTuple();
         }
         builder.sql(")");
         Tuple2<String, List<Object>> sqlResult = builder.build();
@@ -303,8 +308,8 @@ class MiddleTableOperator {
         builder.sql("delete from ");
         builder.sql(middleTable.getTableName());
         builder.sql(" where ");
-        builder.sql(middleTable.getJoinColumnName());
-        builder.sql(" in(");
+        builder.sql(null, middleTable.getColumnDefinition(), true);
+        builder.sql(" in (");
         String separator = "";
         for (Object id : sourceIds) {
             builder.sql(separator);

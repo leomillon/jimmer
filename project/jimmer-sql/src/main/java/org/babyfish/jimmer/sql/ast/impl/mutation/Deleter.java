@@ -5,13 +5,14 @@ import org.babyfish.jimmer.meta.ImmutableType;
 import org.babyfish.jimmer.meta.TargetLevel;
 import org.babyfish.jimmer.runtime.ImmutableSpi;
 import org.babyfish.jimmer.sql.ast.impl.AstContext;
-import org.babyfish.jimmer.sql.meta.Column;
+import org.babyfish.jimmer.sql.meta.ColumnDefinition;
 import org.babyfish.jimmer.sql.DissociateAction;
 import org.babyfish.jimmer.sql.ast.mutation.AffectedTable;
 import org.babyfish.jimmer.sql.ast.mutation.DeleteResult;
 import org.babyfish.jimmer.sql.ast.tuple.Tuple2;
 import org.babyfish.jimmer.sql.runtime.ExecutionException;
 import org.babyfish.jimmer.sql.runtime.ExecutionPurpose;
+import org.babyfish.jimmer.sql.runtime.Reader;
 import org.babyfish.jimmer.sql.runtime.SqlBuilder;
 
 import java.sql.Connection;
@@ -154,19 +155,21 @@ public class Deleter {
         addPostHandleInput(immutableType, ids);
     }
 
+    @SuppressWarnings("unchecked")
     private void tryDeleteFromChildTable(ImmutableProp prop, Collection<?> ids) {
         ImmutableProp manyToOneProp = prop.getMappedBy();
         ImmutableType childType = manyToOneProp.getDeclaringType();
-        String fkColumnName = ((Column)manyToOneProp.getStorage()).getName();
+        ColumnDefinition definition = manyToOneProp.getStorage();
         SqlBuilder builder = new SqlBuilder(new AstContext(data.getSqlClient()));
+        Reader<Object> reader = (Reader<Object>) data.getSqlClient().getReader(childType.getIdProp());
         builder
                 .sql("select ")
-                .sql(childType.getIdProp().<Column>getStorage().getName())
+                .sql(childType.getIdProp().<ColumnDefinition>getStorage())
                 .sql(" from ")
                 .sql(childType.getTableName())
                 .sql(" where ")
-                .sql(fkColumnName)
-                .sql(" in(");
+                .sql(null, definition, true)
+                .sql(" in (");
         String separator = "";
         for (Object id : ids) {
             builder.sql(separator);
@@ -188,7 +191,7 @@ public class Deleter {
                             List<Object> values = new ArrayList<>();
                             try (ResultSet rs = stmt.executeQuery()) {
                                 while (rs.next()) {
-                                    values.add(rs.getObject(1));
+                                    values.add(reader.read(rs, new Reader.Col()));
                                 }
                             }
                             return values;
@@ -234,13 +237,13 @@ public class Deleter {
             return;
         }
 
-        String fkColumnName = ((Column)type.getIdProp().getStorage()).getName();
+        ColumnDefinition definition = type.getIdProp().getStorage();
         SqlBuilder builder = new SqlBuilder(new AstContext(data.getSqlClient()));
         builder.sql("delete from ");
         builder.sql(type.getTableName());
         builder.sql(" where ");
-        builder.sql(fkColumnName);
-        builder.sql(" in(");
+        builder.sql(null, definition, true);
+        builder.sql(" in (");
         String separator = "";
         for (Object id : ids) {
             builder.sql(separator);

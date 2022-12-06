@@ -3,7 +3,6 @@ package org.babyfish.jimmer.sql.runtime;
 import org.babyfish.jimmer.meta.ImmutableProp;
 import org.babyfish.jimmer.meta.ImmutableType;
 import org.babyfish.jimmer.meta.impl.DatabaseIdentifiers;
-import org.babyfish.jimmer.meta.impl.RedirectedProp;
 import org.babyfish.jimmer.sql.association.meta.AssociationType;
 import org.babyfish.jimmer.sql.meta.MiddleTable;
 import org.jetbrains.annotations.NotNull;
@@ -78,7 +77,7 @@ public class EntityManager {
                                             "\" is not manged by the current entity manager"
                             );
                         }
-                        targetInfo.backProps.add(RedirectedProp.source(prop, type));
+                        targetInfo.backProps.add(prop);
                     }
                 }
             }
@@ -131,7 +130,7 @@ public class EntityManager {
 
     @Nullable
     public ImmutableType getTypeByTableName(String tableName) {
-        String standardTableName = DatabaseIdentifiers.standardIdentifier(tableName);
+        String standardTableName = DatabaseIdentifiers.comparableIdentifier(tableName);
         return tableNameTypeMap.get(standardTableName);
     }
 
@@ -177,7 +176,7 @@ public class EntityManager {
             if (!type.isEntity()) {
                 continue;
             }
-            String tableName = DatabaseIdentifiers.standardIdentifier(type.getTableName());
+            String tableName = DatabaseIdentifiers.comparableIdentifier(type.getTableName());
             ImmutableType oldType = tableNameTypeMap.put(tableName, type);
             if (oldType != null) {
                 throw new IllegalArgumentException(
@@ -193,8 +192,8 @@ public class EntityManager {
             tableNameTypeMap.put(tableName, type);
             for (ImmutableProp prop : entityProps(type)) {
                 if (prop.getStorage() instanceof MiddleTable) {
-                    AssociationType associationType = AssociationType.of(RedirectedProp.source(prop, type));
-                    String associationTableName = DatabaseIdentifiers.standardIdentifier(associationType.getTableName());
+                    AssociationType associationType = AssociationType.of(prop);
+                    String associationTableName = DatabaseIdentifiers.comparableIdentifier(associationType.getTableName());
                     ImmutableType oldAssociationType = tableNameTypeMap.put(associationTableName, associationType);
                     if (oldAssociationType != null && !oldAssociationType.equals(associationType)) {
                         throw new IllegalArgumentException(

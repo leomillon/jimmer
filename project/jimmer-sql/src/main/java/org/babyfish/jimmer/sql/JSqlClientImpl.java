@@ -5,7 +5,6 @@ import org.babyfish.jimmer.lang.OldChain;
 import org.babyfish.jimmer.meta.ImmutableProp;
 import org.babyfish.jimmer.meta.ImmutableType;
 import org.babyfish.jimmer.meta.TypedProp;
-import org.babyfish.jimmer.meta.impl.RedirectedProp;
 import org.babyfish.jimmer.sql.ast.impl.mutation.MutableDeleteImpl;
 import org.babyfish.jimmer.sql.ast.impl.mutation.MutableUpdateImpl;
 import org.babyfish.jimmer.sql.ast.impl.query.MutableRootQueryImpl;
@@ -429,7 +428,7 @@ class JSqlClientImpl implements JSqlClient {
             for (ImmutableType type : ((CachesImpl)caches).getObjectCacheMap().keySet()) {
                 for (ImmutableProp prop : type.getProps().values()) {
                     if (prop.hasTransientResolver()) {
-                        manager.get(RedirectedProp.source(prop, type));
+                        manager.get(prop);
                     }
                 }
             }
@@ -539,15 +538,65 @@ class JSqlClientImpl implements JSqlClient {
         @Override
         @OldChain
         public JSqlClient.Builder addScalarProvider(ScalarProvider<?, ?> scalarProvider) {
-            if (scalarProviderMap.containsKey(scalarProvider.getScalarType())) {
+            Class<?> scalarType = scalarProvider.getScalarType();
+            if (scalarProviderMap.containsKey(scalarType)) {
                 throw new IllegalStateException(
                         "Cannot set scalar provider for scalar type \"" +
-                                scalarProvider.getScalarType() +
+                                scalarType +
                                 "\" twice"
                 );
             }
-            scalarProviderMap.put(scalarProvider.getScalarType(), scalarProvider);
+            if (Collection.class.isAssignableFrom(scalarType) || Map.class.isAssignableFrom(scalarType)) {
+                throw new IllegalStateException(
+                        "Illegal scalar provider type \"" +
+                                scalarProvider.getClass() +
+                                "\" is illegal, the scalar type \"" +
+                                scalarType +
+                                "\" cannot be collection or map"
+                );
+            }
+            Class<?> ormAnnoType = getOrmAnnotationType(scalarType);
+            if (ormAnnoType != null) {
+                throw new IllegalStateException(
+                        "Illegal scalar provider type \"" +
+                                scalarProvider.getClass() +
+                                "\" is illegal, the scalar type \"" +
+                                scalarType +
+                                "\" or it super types cannot be decorated by \"@" +
+                                ormAnnoType.getName() +
+                                "\""
+                );
+            }
+            scalarProviderMap.put(scalarType, scalarProvider);
             return this;
+        }
+
+        private Class<?> getOrmAnnotationType(Class<?> type) {
+            if (type == null) {
+                return null;
+            }
+            if (type != Object.class) {
+                if (type.isAnnotationPresent(Entity.class)) {
+                    return Entity.class;
+                }
+                if (type.isAssignableFrom(MappedSuperclass.class)) {
+                    return MappedSuperclass.class;
+                }
+                if (type.isAssignableFrom(Embeddable.class)) {
+                    return Embeddable.class;
+                }
+            }
+            Class<?> annoType = getOrmAnnotationType(type.getSuperclass());
+            if (annoType != null) {
+                return annoType;
+            }
+            for (Class<?> interfaceType : type.getInterfaces()) {
+                annoType = getOrmAnnotationType(interfaceType);
+                if (annoType != null) {
+                    return annoType;
+                }
+            }
+            return null;
         }
 
         @Override

@@ -6,7 +6,6 @@ import org.babyfish.jimmer.DraftConsumer;
 import org.babyfish.jimmer.apt.meta.ImmutableProp;
 import org.babyfish.jimmer.meta.TypedProp;
 import org.babyfish.jimmer.runtime.DraftContext;
-import org.babyfish.jimmer.runtime.ImmutableSpi;
 import org.babyfish.jimmer.sql.JoinType;
 import org.babyfish.jimmer.impl.validation.Validator;
 
@@ -22,9 +21,6 @@ class Constants {
 
     public static final ClassName JSON_IGNORE_CLASS_NAME =
             ClassName.get(JsonIgnore.class);
-
-    public static final ClassName IMMUTABLE_SPI_CLASS_NAME =
-            ClassName.get(ImmutableSpi.class);
 
     public static final ClassName DRAFT_CONTEXT_CLASS_NAME =
             ClassName.get(DraftContext.class);
@@ -55,12 +51,6 @@ class Constants {
 
     public static final ClassName JOIN_TYPE_CLASS_NAME =
             ClassName.get(JoinType.class);
-
-    public static final ClassName REDIRECTED_PROP_CLASS_NAME =
-            ClassName.get(
-                    "org.babyfish.jimmer.meta.impl",
-                    "RedirectedProp"
-            );
 
     public static final ClassName PROPS_CLASS_NAME =
             ClassName.get(
@@ -190,6 +180,19 @@ class Constants {
             ClassName.get(
                     "org.babyfish.jimmer.sql.ast.impl.table",
                     "TableProxies"
+            );
+
+    public static final ClassName ABSTRACT_TYPED_EMBEDDED_PROP_EXPRESSION_CLASS_NAME =
+            ClassName.get(
+                    "org.babyfish.jimmer.sql.ast.embedded",
+                    "AbstractTypedEmbeddedPropExpression"
+            );
+
+    public static final ClassName EMBEDDED_PROP_EXPRESSION_CLASS_NAME =
+            ClassName.get(
+                    "org.babyfish.jimmer.sql.ast",
+                    "PropExpression",
+                    "Embedded"
             );
 
     public static final String DRAFT_FIELD_CTX =

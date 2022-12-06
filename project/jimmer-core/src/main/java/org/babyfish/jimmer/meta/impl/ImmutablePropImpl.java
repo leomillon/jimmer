@@ -26,17 +26,19 @@ class ImmutablePropImpl implements ImmutableProp {
 
     private final boolean nullable;
 
-    private KProperty1<?, ?> kotlinProp;
+    private final KProperty1<?, ?> kotlinProp;
 
-    private Method javaGetter;
+    private final Method javaGetter;
 
-    private Annotation associationAnnotation;
+    private final Annotation associationAnnotation;
 
     private final boolean isTransient;
 
     private final boolean hasTransientResolver;
 
     private final DissociateAction dissociateAction;
+
+    private final ImmutableProp base;
 
     private Storage storage;
 
@@ -81,7 +83,10 @@ class ImmutablePropImpl implements ImmutableProp {
                     .filter(it -> name.equals(it.getName()))
                     .findFirst()
                     .get();
+        } else {
+            kotlinProp = null;
         }
+        Method javaGetter = null;
         try {
             javaGetter = declaringType.getJavaClass().getDeclaredMethod(name);
         } catch (NoSuchMethodException ignored) {
@@ -108,13 +113,15 @@ class ImmutablePropImpl implements ImmutableProp {
                             "\""
             );
         }
+        this.javaGetter = javaGetter;
 
         Transient trans = getAnnotation(Transient.class);
         isTransient = trans != null;
         hasTransientResolver = trans != null && trans.value() != void.class;
         if (associationType != null) {
-
             associationAnnotation = getAnnotation(associationType);
+        } else {
+            associationAnnotation = null;
         }
 
         OnDissociate onDissociate = getAnnotation(OnDissociate.class);
@@ -130,6 +137,35 @@ class ImmutablePropImpl implements ImmutableProp {
         } else {
             dissociateAction = DissociateAction.NONE;
         }
+        this.base = null;
+    }
+
+    ImmutablePropImpl(
+            ImmutableTypeImpl declaringType,
+            ImmutablePropImpl base
+    ) {
+        if (!base.getDeclaringType().isAssignableFrom(declaringType)) {
+            throw new IllegalArgumentException(
+                    "The new declaring type \"" +
+                            declaringType +
+                            "\" is illegal, it is not derived type of original declaring type \"" +
+                            base.getDeclaringType() +
+                            "\""
+            );
+        }
+        this.declaringType = declaringType;
+        this.id = base.id;
+        this.name = base.name;
+        this.category = base.category;
+        this.elementClass = base.elementClass;
+        this.nullable = base.nullable;
+        this.kotlinProp = base.kotlinProp;
+        this.javaGetter = base.javaGetter;
+        this.associationAnnotation = base.associationAnnotation;
+        this.isTransient = base.isTransient;
+        this.hasTransientResolver = base.hasTransientResolver;
+        this.dissociateAction = base.dissociateAction;
+        this.base = base.base != null ? base.base : base;
     }
 
     @NotNull
@@ -162,8 +198,24 @@ class ImmutablePropImpl implements ImmutableProp {
     }
 
     @Override
-    public boolean isScalar() {
-        return this.category == ImmutablePropCategory.SCALAR;
+    public boolean isEmbedded(EmbeddedLevel level) {
+        ImmutableType targetType = getTargetType();
+        if (level.hasReference() &&
+                isReference(TargetLevel.ENTITY) &&
+                targetType.getIdProp().isEmbedded(EmbeddedLevel.SCALAR)
+        ) {
+            return true;
+        }
+        return level.hasScalar() && targetType != null && targetType.isEmbeddable();
+    }
+
+    @Override
+    public boolean isScalar(TargetLevel level) {
+        if (level == TargetLevel.OBJECT) {
+            return category == ImmutablePropCategory.SCALAR;
+        }
+        ImmutableType targetType = getTargetType();
+        return targetType == null || !targetType.isEntity();
     }
 
     @Override
@@ -174,19 +226,19 @@ class ImmutablePropImpl implements ImmutableProp {
     @Override
     public boolean isAssociation(TargetLevel level) {
         return this.category.isAssociation() &&
-                (level == TargetLevel.OBJECT || !isTransient);
+                (level == TargetLevel.OBJECT || !isTransient && getTargetType().isEntity());
     }
 
     @Override
     public boolean isReference(TargetLevel level) {
         return this.category == ImmutablePropCategory.REFERENCE &&
-                (level == TargetLevel.OBJECT || !isTransient);
+                (level == TargetLevel.OBJECT || !isTransient && getTargetType().isEntity());
     }
 
     @Override
     public boolean isReferenceList(TargetLevel level) {
         return this.category == ImmutablePropCategory.REFERENCE_LIST &&
-                (level == TargetLevel.OBJECT || !isTransient);
+                (level == TargetLevel.OBJECT || !isTransient && getTargetType().isEntity());
     }
 
     @Override
@@ -223,7 +275,7 @@ class ImmutablePropImpl implements ImmutableProp {
                     .filter(it -> it.annotationType() == annotationType)
                     .toArray();
         }
-        if (propArr == null && propArr.length == 0) {
+        if (propArr == null || propArr.length == 0) {
             return getterArr;
         }
         A[] mergedArr = (A[])new Object[propArr.length + getterArr.length];
@@ -258,6 +310,7 @@ class ImmutablePropImpl implements ImmutableProp {
         if (storageResolved) {
             return (S)storage;
         }
+        validateDeclaringEntity("storage");
         storage = Storages.of(this);
         storageResolved = true;
         return (S)storage;
@@ -335,7 +388,7 @@ class ImmutablePropImpl implements ImmutableProp {
                                         "\""
                         );
                     }
-                    if (!prop.isScalar()) {
+                    if (!prop.isScalar(TargetLevel.ENTITY)) {
                         throw new ModelException(
                                 "Illegal property \"" +
                                         this +
@@ -359,6 +412,7 @@ class ImmutablePropImpl implements ImmutableProp {
             return mappedBy;
         }
         if (isAssociation(TargetLevel.ENTITY)) {
+            validateDeclaringEntity("mappedBy");
             String mappedBy = "";
             OneToOne oneToOne = getAnnotation(OneToOne.class);
             if (oneToOne != null) {
@@ -462,6 +516,7 @@ class ImmutablePropImpl implements ImmutableProp {
             return opposite;
         }
         if (isAssociation(TargetLevel.ENTITY)) {
+            validateDeclaringEntity("opposite");
             opposite = getMappedBy();
             if (opposite == null) {
                 for (ImmutableProp backProp : getTargetType().getProps().values()) {
@@ -476,13 +531,34 @@ class ImmutablePropImpl implements ImmutableProp {
         return opposite;
     }
 
+    ImmutableProp getBase() {
+        return base;
+    }
+
+    @Override
+    public int hashCode() {
+        return System.identityHashCode(base != null ? base : this);
+    }
+
     @Override
     public boolean equals(Object o) {
-        return o instanceof ImmutableProp && this == RedirectedProp.unwrap((ImmutableProp) o);
+        if (!(o instanceof ImmutablePropImpl)) {
+            return false;
+        }
+        ImmutablePropImpl prop = (ImmutablePropImpl) o;
+        return (base != null ? base : this) == (prop.base != null ? prop.base : prop);
     }
 
     @Override
     public String toString() {
         return declaringType.toString() + '.' + name;
+    }
+
+    private void validateDeclaringEntity(String value) {
+        if (!this.declaringType.isEntity()) {
+            throw new UnsupportedOperationException(
+                    "Cannot get the `" + value + "` of \"" + this + "\" because it is not declared in entity"
+            );
+        }
     }
 }

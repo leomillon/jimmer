@@ -2,40 +2,38 @@ package org.babyfish.jimmer.sql.meta;
 
 public class MiddleTable implements Storage {
 
-    private String tableName;
+    private final String tableName;
 
-    private String joinColumnName;
+    private final ColumnDefinition definition;
 
-    private String targetJoinColumnName;
+    private final ColumnDefinition targetDefinition;
 
     private MiddleTable inverse;
 
     public MiddleTable(
             String tableName,
-            String joinColumnName,
-            String targetJoinColumnName
-    ) {
+            ColumnDefinition definition, ColumnDefinition targetDefinition) {
         this.tableName = tableName;
-        this.joinColumnName = joinColumnName;
-        this.targetJoinColumnName = targetJoinColumnName;
+        this.definition = definition;
+        this.targetDefinition = targetDefinition;
     }
 
     public String getTableName() {
         return tableName;
     }
 
-    public String getJoinColumnName() {
-        return joinColumnName;
+    public ColumnDefinition getColumnDefinition() {
+        return definition;
     }
 
-    public String getTargetJoinColumnName() {
-        return targetJoinColumnName;
+    public ColumnDefinition getTargetColumnDefinition() {
+        return targetDefinition;
     }
 
     public MiddleTable getInverse() {
         MiddleTable iv = inverse;
         if (iv == null) {
-            iv = new MiddleTable(tableName, targetJoinColumnName, joinColumnName);
+            iv = new MiddleTable(tableName, targetDefinition, definition);
             inverse = iv;
         }
         return iv;

@@ -140,25 +140,27 @@ class AssociationExecutable implements Executable<Integer> {
         SqlBuilder builder = new SqlBuilder(new AstContext(sqlClient));
         builder
                 .sql("select ")
-                .sql(middleTable.getJoinColumnName())
+                .sql(middleTable.getColumnDefinition())
                 .sql(", ")
-                .sql(middleTable.getTargetJoinColumnName())
+                .sql(middleTable.getTargetColumnDefinition())
                 .sql(" from ")
                 .sql(associationType.getTableName())
-                .sql(" where (")
-                .sql(middleTable.getJoinColumnName())
+                .sql(" where ")
+                .enterTuple()
+                .sql(middleTable.getColumnDefinition())
                 .sql(", ")
-                .sql(middleTable.getTargetJoinColumnName())
-                .sql(") in(");
+                .sql(middleTable.getTargetColumnDefinition())
+                .leaveTuple()
+                .sql(" in (");
         String separator = "";
         for (Tuple2<Object, Object> idTuple : idTuples) {
             builder
                     .sql(separator)
-                    .sql("(")
+                    .enterTuple()
                     .variable(idTuple.get_1())
                     .sql(", ")
                     .variable(idTuple.get_2())
-                    .sql(")");
+                    .leaveTuple();
             separator = ", ";
         }
         builder.sql(")");

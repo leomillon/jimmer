@@ -4,7 +4,6 @@ import org.babyfish.jimmer.meta.ImmutableProp;
 import org.babyfish.jimmer.meta.ImmutableType;
 import org.babyfish.jimmer.meta.TargetLevel;
 import org.babyfish.jimmer.meta.TypedProp;
-import org.babyfish.jimmer.meta.impl.RedirectedProp;
 import org.babyfish.jimmer.sql.ImmutableProps;
 import org.babyfish.jimmer.sql.JoinType;
 import org.babyfish.jimmer.sql.association.meta.AssociationProp;
@@ -15,7 +14,7 @@ import org.babyfish.jimmer.sql.ast.impl.util.AbstractDataManager;
 import org.babyfish.jimmer.sql.ast.table.TableEx;
 import org.babyfish.jimmer.sql.ast.table.WeakJoin;
 import org.babyfish.jimmer.sql.fetcher.Fetcher;
-import org.babyfish.jimmer.sql.meta.Column;
+import org.babyfish.jimmer.sql.meta.ColumnDefinition;
 import org.babyfish.jimmer.sql.meta.MiddleTable;
 import org.babyfish.jimmer.sql.ast.Expression;
 import org.babyfish.jimmer.sql.ast.NumericExpression;
@@ -250,9 +249,6 @@ class TableImpl<E> extends AbstractDataManager<String, TableImplementor<?>> impl
                             "\""
             );
         }
-        if (treatedAs != null) {
-            immutableProp = RedirectedProp.target(immutableProp, treatedAs);
-        }
         return (TableImplementor<X>) join0(false, immutableProp, joinType);
     }
 
@@ -317,7 +313,7 @@ class TableImpl<E> extends AbstractDataManager<String, TableImplementor<?>> impl
             return join1(
                     joinName,
                     !isInverse,
-                    RedirectedProp.source(prop.getMappedBy(), prop.getTargetType()),
+                    prop.getMappedBy(),
                     joinType
             );
         }
@@ -479,10 +475,10 @@ class TableImpl<E> extends AbstractDataManager<String, TableImplementor<?>> impl
                         builder,
                         joinType,
                         parent.alias,
-                        joinProp.<Column>getStorage().getName(),
+                        joinProp.getStorage(),
                         immutableType.getTableName(),
                         alias,
-                        immutableType.getIdProp().<Column>getStorage().getName(),
+                        immutableType.getIdProp().getStorage(),
                         mode
                 );
             }
@@ -501,10 +497,10 @@ class TableImpl<E> extends AbstractDataManager<String, TableImplementor<?>> impl
                     builder,
                     joinType,
                     parent.alias,
-                    ((Column)parent.immutableType.getIdProp().getStorage()).getName(),
+                    parent.immutableType.getIdProp().getStorage(),
                     middleTable.getTableName(),
                     middleTableAlias,
-                    middleTable.getJoinColumnName(),
+                    middleTable.getColumnDefinition(),
                     mode
             );
             if (builder.getAstContext().getTableUsedState(this) == TableUsedState.USED && (
@@ -515,10 +511,10 @@ class TableImpl<E> extends AbstractDataManager<String, TableImplementor<?>> impl
                         builder,
                         joinType,
                         middleTableAlias,
-                        middleTable.getTargetJoinColumnName(),
+                        middleTable.getTargetColumnDefinition(),
                         immutableType.getTableName(),
                         alias,
-                        ((Column)immutableType.getIdProp().getStorage()).getName(),
+                        immutableType.getIdProp().getStorage(),
                         RenderMode.NORMAL
                 );
             }
@@ -527,10 +523,10 @@ class TableImpl<E> extends AbstractDataManager<String, TableImplementor<?>> impl
                     builder,
                     joinType,
                     parent.alias,
-                    ((Column)joinProp.getStorage()).getName(),
+                    joinProp.getStorage(),
                     immutableType.getTableName(),
                     alias,
-                    ((Column)immutableType.getIdProp().getStorage()).getName(),
+                    immutableType.getIdProp().getStorage(),
                     mode
             );
         }
@@ -550,10 +546,10 @@ class TableImpl<E> extends AbstractDataManager<String, TableImplementor<?>> impl
                     sqlBuilder,
                     joinType,
                     parent.alias,
-                    ((Column)parent.immutableType.getIdProp().getStorage()).getName(),
+                    parent.immutableType.getIdProp().getStorage(),
                     middleTable.getTableName(),
                     middleTableAlias,
-                    middleTable.getTargetJoinColumnName(),
+                    middleTable.getTargetColumnDefinition(),
                     mode
             );
             if (sqlBuilder.getAstContext().getTableUsedState(this) == TableUsedState.USED && (
@@ -564,10 +560,10 @@ class TableImpl<E> extends AbstractDataManager<String, TableImplementor<?>> impl
                         sqlBuilder,
                         joinType,
                         middleTableAlias,
-                        middleTable.getJoinColumnName(),
+                        middleTable.getColumnDefinition(),
                         immutableType.getTableName(),
                         alias,
-                        ((Column)immutableType.getIdProp().getStorage()).getName(),
+                        immutableType.getIdProp().getStorage(),
                         RenderMode.NORMAL
                 );
             }
@@ -576,10 +572,10 @@ class TableImpl<E> extends AbstractDataManager<String, TableImplementor<?>> impl
                     sqlBuilder,
                     joinType,
                     parent.alias,
-                    ((Column)parent.immutableType.getIdProp().getStorage()).getName(),
+                    parent.immutableType.getIdProp().getStorage(),
                     immutableType.getTableName(),
                     alias,
-                    ((Column)joinProp.getStorage()).getName(),
+                    joinProp.getStorage(),
                     mode
             );
         }
@@ -589,10 +585,10 @@ class TableImpl<E> extends AbstractDataManager<String, TableImplementor<?>> impl
             SqlBuilder sqlBuilder,
             JoinType joinType,
             String previousAlias,
-            String previousColumnName,
+            ColumnDefinition previousDefinition,
             String newTableName,
             String newAlias,
-            String newColumnName,
+            ColumnDefinition newDefinition,
             RenderMode mode
     ) {
         if (mode != RenderMode.NORMAL && joinType != JoinType.INNER) {
@@ -617,19 +613,33 @@ class TableImpl<E> extends AbstractDataManager<String, TableImplementor<?>> impl
                 break;
         }
         if (mode == RenderMode.NORMAL || mode == RenderMode.WHERE_ONLY) {
-            sqlBuilder
-                    .sql(previousAlias)
-                    .sql(".")
-                    .sql(previousColumnName)
-                    .sql(" = ")
-                    .sql(newAlias)
-                    .sql(".")
-                    .sql(newColumnName);
+            int size = previousDefinition.size();
+            boolean addSeparator = false;
+            for (int i = 0; i < size; i++) {
+                if (addSeparator) {
+                    sqlBuilder.sql(" and ");
+                } else {
+                    addSeparator = true;
+                }
+                sqlBuilder
+                        .sql(previousAlias)
+                        .sql(".")
+                        .sql(previousDefinition.name(i))
+                        .sql(" = ")
+                        .sql(newAlias)
+                        .sql(".")
+                        .sql(newDefinition.name(i));
+            }
         }
     }
 
     @Override
-    public void renderSelection(ImmutableProp prop, SqlBuilder builder) {
+    public void renderSelection(
+            ImmutableProp prop,
+            SqlBuilder builder,
+            ColumnDefinition optionalDefinition,
+            boolean withPrefix
+    ) {
         if (prop.isId() && joinProp != null) {
             MiddleTable middleTable;
             if (joinProp.getStorage() instanceof MiddleTable) {
@@ -639,23 +649,60 @@ class TableImpl<E> extends AbstractDataManager<String, TableImplementor<?>> impl
             }
             boolean isInverse = this.isInverse;
             if (middleTable != null) {
-                builder.sql(middleTableAlias).sql(".");
-                if (isInverse) {
-                    builder.sql(middleTable.getJoinColumnName());
+                if (optionalDefinition == null) {
+                    if (isInverse) {
+                        builder.sql(withPrefix ? middleTableAlias : null, middleTable.getColumnDefinition());
+                    } else {
+                        builder.sql(withPrefix ? middleTableAlias : null, middleTable.getTargetColumnDefinition());
+                    }
                 } else {
-                    builder.sql(middleTable.getTargetJoinColumnName());
+                    ColumnDefinition fullDefinition = prop.getStorage();
+                    ColumnDefinition parentDefinition = isInverse ?
+                            middleTable.getColumnDefinition() :
+                            middleTable.getTargetColumnDefinition();
+                    boolean addComma = false;
+                    for (String columnName : optionalDefinition) {
+                        if (addComma) {
+                            builder.sql(", ");
+                        } else {
+                            addComma = true;
+                        }
+                        int index = fullDefinition.index(columnName);
+                        String parentColumnName = parentDefinition.name(index);
+                        if (withPrefix) {
+                            builder.sql(middleTableAlias).sql(".");
+                        }
+                        builder.sql(parentColumnName);
+                    }
                 }
                 return;
             }
             if (!isInverse) {
-                builder
-                        .sql(parent.alias)
-                        .sql(".")
-                        .sql(((Column)joinProp.getStorage()).getName());
+                if (optionalDefinition == null) {
+                    builder.sql(withPrefix ? parent.alias : null, joinProp.getStorage());
+                } else {
+                    ColumnDefinition fullDefinition = prop.getStorage();
+                    ColumnDefinition parentDefinition = joinProp.getStorage();
+                    boolean addComma = false;
+                    for (String columnName : optionalDefinition) {
+                        if (addComma) {
+                            builder.sql(", ");
+                        } else {
+                            addComma = true;
+                        }
+                        int index = fullDefinition.index(columnName);
+                        String parentColumnName = parentDefinition.name(index);
+                        if (withPrefix) {
+                            builder.sql(parent.alias).sql(".");
+                        }
+                        builder.sql(parentColumnName);
+                    }
+                }
                 return;
             }
         }
-        builder.sql(alias).sql(".").sql(((Column)prop.getStorage()).getName());
+        ColumnDefinition definition = optionalDefinition != null ? optionalDefinition : prop.getStorage();
+        builder.sql(withPrefix ? alias : null, definition);
     }
 
     @Override

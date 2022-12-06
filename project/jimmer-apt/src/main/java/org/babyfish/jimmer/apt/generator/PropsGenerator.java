@@ -5,6 +5,7 @@ import org.babyfish.jimmer.apt.GeneratorException;
 import org.babyfish.jimmer.apt.TypeUtils;
 import org.babyfish.jimmer.apt.meta.ImmutableProp;
 import org.babyfish.jimmer.apt.meta.ImmutableType;
+import org.babyfish.jimmer.sql.Entity;
 import org.babyfish.jimmer.sql.JoinType;
 
 import javax.annotation.processing.Filer;
@@ -77,14 +78,12 @@ public class PropsGenerator {
         }
         try {
             for (ImmutableProp prop : type.getDeclaredProps().values()) {
-                addStaticProp(prop, false);
+                addStaticProp(prop);
             }
             ImmutableType superType = type.getSuperType();
             if (type.isEntity() && superType != null && superType.isMappedSuperClass()) {
                 for (ImmutableProp prop : superType.getProps().values()) {
-                    if (prop.isAssociation() || prop.isTransient()) {
-                        addStaticProp(prop, true);
-                    }
+                    addStaticProp(prop);
                 }
             }
             if (type.isEntity() || type.isMappedSuperClass()) {
@@ -101,21 +100,21 @@ public class PropsGenerator {
         }
     }
 
-    private void addStaticProp(ImmutableProp prop, boolean override) {
+    private void addStaticProp(ImmutableProp prop) {
         ClassName rawClassName;
         String action;
         if (prop.isList()) {
-            rawClassName = prop.isAssociation() ?
+            rawClassName = prop.isAssociation(false) ?
                     Constants.REFERENCE_LIST_CLASS_NAME :
                     Constants.SCALAR_LIST_CLASS_NAME;
-            action = prop.isAssociation() ?
+            action = prop.isAssociation(false) ?
                     "referenceList" :
                     "scalarList";
         } else {
-            rawClassName = prop.isAssociation() ?
+            rawClassName = prop.isAssociation(false) ?
                     Constants.REFERENCE_CLASS_NAME :
                     Constants.SCALAR_CLASS_NAME;
-            action = prop.isAssociation() ?
+            action = prop.isAssociation(false) ?
                     "reference" :
                     "scalar";
         }
@@ -131,27 +130,15 @@ public class PropsGenerator {
                         Modifier.PUBLIC,
                         Modifier.STATIC,
                         Modifier.FINAL
+                )
+                .initializer(
+                        "\n    $T.$L($T.get($T.class).getProp($L))",
+                        Constants.TYPED_PROP_CLASS_NAME,
+                        action,
+                        Constants.RUNTIME_TYPE_CLASS_NAME,
+                        type.getClassName(),
+                        Integer.toString(prop.getId())
                 );
-        if (override) {
-            builder.initializer(
-                    "\n    $T.$L($T.source($T.$L.unwrap(), $T.class))",
-                    Constants.TYPED_PROP_CLASS_NAME,
-                    action,
-                    Constants.REDIRECTED_PROP_CLASS_NAME,
-                    type.getSuperType().getPropsClassName(),
-                    fieldName,
-                    type.getClassName()
-            );
-        } else {
-            builder.initializer(
-                    "\n    $T.$L($T.get($T.class).getProp($L))",
-                    Constants.TYPED_PROP_CLASS_NAME,
-                    action,
-                    Constants.RUNTIME_TYPE_CLASS_NAME,
-                    type.getClassName(),
-                    Integer.toString(prop.getId())
-            );
-        }
         typeBuilder.addField(builder.build());
     }
 
@@ -178,14 +165,25 @@ public class PropsGenerator {
             boolean withJoinType,
             boolean withImplementation
     ) {
+        return property(typeUtils, isTableEx, prop, withJoinType, withImplementation, false);
+    }
+
+    static MethodSpec property(
+            TypeUtils typeUtils,
+            boolean isTableEx,
+            ImmutableProp prop,
+            boolean withJoinType,
+            boolean withImplementation,
+            boolean ignoreOverride
+    ) {
         if (prop.isTransient()) {
             return null;
         }
-        if (withJoinType && !prop.isAssociation()) {
+        if (withJoinType && !prop.isAssociation(true)) {
             return null;
         }
         TypeName returnType;
-        if (prop.isAssociation()) {
+        if (prop.isAssociation(true)) {
             if (isTableEx) {
                 returnType = typeUtils
                         .getImmutableType(prop.getElementType())
@@ -195,6 +193,12 @@ public class PropsGenerator {
                         .getImmutableType(prop.getElementType())
                         .getTableClassName();
             }
+        } else if (prop.isAssociation(false)) {
+            ClassName className = (ClassName)prop.getTypeName();
+            returnType = ClassName.get(
+                    className.packageName(),
+                    className.simpleName() + ImmutableType.PROP_EXPRESSION_SUFFIX
+            );
         } else {
             if (prop.getTypeName().isPrimitive() && !prop.getTypeName().equals(TypeName.BOOLEAN)) {
                 returnType = ParameterizedTypeName.get(
@@ -225,7 +229,7 @@ public class PropsGenerator {
                 .addModifiers(Modifier.PUBLIC)
                 .returns(returnType);
         if (withImplementation) {
-            if (!isTableEx) {
+            if (!isTableEx && !ignoreOverride) {
                 builder.addAnnotation(Override.class);
             }
         } else {
@@ -235,7 +239,7 @@ public class PropsGenerator {
             builder.addParameter(Constants.JOIN_TYPE_CLASS_NAME, "joinType");
         }
         if (withImplementation) {
-            if (prop.isAssociation()) {
+            if (prop.isAssociation(true)) {
                 builder.addStatement("__beforeJoin()");
                 if (withJoinType) {
                     builder
@@ -250,6 +254,8 @@ public class PropsGenerator {
                             .endControlFlow()
                             .addStatement("return new $T(joinOperation($S))", returnType, prop.getName());
                 }
+            } else if (prop.isAssociation(false)) {
+                builder.addStatement("return new $T(get($S))", returnType, prop.getName());
             } else {
                 builder.addStatement("return get($S)", prop.getName());
             }

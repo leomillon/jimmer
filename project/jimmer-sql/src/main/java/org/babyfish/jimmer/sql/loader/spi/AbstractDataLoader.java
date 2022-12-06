@@ -5,7 +5,6 @@ import org.babyfish.jimmer.meta.ImmutableProp;
 import org.babyfish.jimmer.meta.ImmutableType;
 import org.babyfish.jimmer.meta.OrderedItem;
 import org.babyfish.jimmer.meta.TargetLevel;
-import org.babyfish.jimmer.meta.impl.RedirectedProp;
 import org.babyfish.jimmer.runtime.DraftSpi;
 import org.babyfish.jimmer.runtime.ImmutableSpi;
 import org.babyfish.jimmer.runtime.Internal;
@@ -27,13 +26,12 @@ import org.babyfish.jimmer.sql.cache.CacheAbandonedCallback;
 import org.babyfish.jimmer.sql.cache.CacheEnvironment;
 import org.babyfish.jimmer.sql.fetcher.Fetcher;
 import org.babyfish.jimmer.sql.fetcher.FieldFilter;
-import org.babyfish.jimmer.sql.fetcher.FieldFilterArgs;
 import org.babyfish.jimmer.sql.fetcher.impl.FetcherImpl;
 import org.babyfish.jimmer.sql.fetcher.impl.FieldFilterArgsImpl;
 import org.babyfish.jimmer.sql.filter.CacheableFilter;
 import org.babyfish.jimmer.sql.filter.Filter;
 import org.babyfish.jimmer.sql.filter.impl.FilterArgsImpl;
-import org.babyfish.jimmer.sql.meta.Column;
+import org.babyfish.jimmer.sql.meta.ColumnDefinition;
 import org.babyfish.jimmer.sql.meta.MiddleTable;
 import org.babyfish.jimmer.sql.meta.Storage;
 import org.babyfish.jimmer.sql.runtime.ExecutionException;
@@ -128,7 +126,6 @@ public abstract class AbstractDataLoader {
                         "\"" + entityType + "\" is not entity"
                 );
             }
-            prop = RedirectedProp.source(prop, entityType);
         } else if (!prop.getDeclaringType().isEntity()) {
             throw new IllegalArgumentException(
                     "\"" + prop + "\" is not declared in entity"
@@ -187,7 +184,7 @@ public abstract class AbstractDataLoader {
         if (resolver != null) {
             return loadTransients(sources);
         }
-        if (prop.getStorage() instanceof Column) {
+        if (prop.getStorage() instanceof ColumnDefinition) {
             return (Map<ImmutableSpi, Object>)(Map<?, ?>) loadParents(sources);
         }
         if (prop.isReferenceList(TargetLevel.ENTITY)) {
@@ -581,9 +578,7 @@ public abstract class AbstractDataLoader {
             Object sourceId = sourceIds.iterator().next();
             List<R> results = Queries.createQuery(sqlClient, prop.getTargetType(), ExecutionPurpose.LOADER, true, (q, target) -> {
                 Expression<Object> sourceIdExpr = target
-                        .inverseJoin(
-                                RedirectedProp.source(prop, prop.getDeclaringType())
-                        )
+                        .inverseJoin(prop)
                         .get(sourceIdProp.getName());
                 q.where(sourceIdExpr.eq(sourceId));
                 if (!applyPropFilter(q, target, sourceIds) & !applyGlobalFilter(q, target) ) {
@@ -595,9 +590,7 @@ public abstract class AbstractDataLoader {
         }
         return Queries.createQuery(sqlClient, prop.getTargetType(), ExecutionPurpose.LOADER, true, (q, target) -> {
             Expression<Object> sourceIdExpr = target
-                    .inverseJoin(
-                            RedirectedProp.source(prop, prop.getDeclaringType())
-                    )
+                    .inverseJoin(prop)
                     .get(sourceIdProp.getName());
             q.where(sourceIdExpr.in(sourceIds));
             if (!applyPropFilter(q, target, sourceIds) & !applyGlobalFilter(q, target)) {

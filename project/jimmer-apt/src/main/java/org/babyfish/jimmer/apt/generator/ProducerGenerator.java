@@ -1,7 +1,6 @@
 package org.babyfish.jimmer.apt.generator;
 
 import com.squareup.javapoet.*;
-import org.babyfish.jimmer.apt.TypeUtils;
 import org.babyfish.jimmer.apt.meta.ImmutableProp;
 import org.babyfish.jimmer.apt.meta.ImmutableType;
 import org.babyfish.jimmer.meta.ImmutablePropCategory;
@@ -15,14 +14,11 @@ import static org.babyfish.jimmer.apt.generator.Constants.RUNTIME_TYPE_CLASS_NAM
 
 public class ProducerGenerator {
 
-    private TypeUtils typeUtils;
-
-    private ImmutableType type;
+    private final ImmutableType type;
 
     private TypeSpec.Builder typeBuilder;
 
-    ProducerGenerator(TypeUtils typeUtils, ImmutableType type) {
-        this.typeUtils = typeUtils;
+    ProducerGenerator(ImmutableType type) {
         this.type = type;
     }
 
@@ -108,10 +104,10 @@ public class ProducerGenerator {
         for (ImmutableProp prop : type.getDeclaredProps().values()) {
             ImmutablePropCategory category;
             if (prop.isList()) {
-                category = prop.isAssociation() ?
+                category = prop.isAssociation(false) ?
                         ImmutablePropCategory.REFERENCE_LIST :
                         ImmutablePropCategory.SCALAR_LIST;
-            } else if (prop.isAssociation()) {
+            } else if (prop.isAssociation(false)) {
                 category = ImmutablePropCategory.REFERENCE;
             } else {
                 category = ImmutablePropCategory.SCALAR;
@@ -129,14 +125,14 @@ public class ProducerGenerator {
                         prop.getId(),
                         prop.getName()
                 );
-            } else if (prop.getAnnotation(Key.class) != null && !prop.isAssociation()) {
+            } else if (prop.getAnnotation(Key.class) != null && !prop.isAssociation(false)) {
                 builder.add(
                         ".key($L, $S, $T.class)\n",
                         prop.getId(),
                         prop.getName(),
                         prop.getElementTypeName()
                 );
-            } else if (prop.getAnnotation(Key.class) != null && prop.isAssociation()) {
+            } else if (prop.getAnnotation(Key.class) != null && prop.isAssociation(false)) {
                 builder.add(
                         ".keyReference($L, $S, $T.class, $L)\n",
                         prop.getId(),

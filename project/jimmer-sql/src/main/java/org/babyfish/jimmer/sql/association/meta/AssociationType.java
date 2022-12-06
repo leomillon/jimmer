@@ -5,11 +5,10 @@ import org.babyfish.jimmer.meta.ImmutableProp;
 import org.babyfish.jimmer.meta.ImmutableType;
 import org.babyfish.jimmer.meta.TypedProp;
 import org.babyfish.jimmer.meta.impl.DatabaseIdentifiers;
+import org.babyfish.jimmer.meta.impl.PropChains;
 import org.babyfish.jimmer.runtime.DraftContext;
 import org.babyfish.jimmer.sql.association.Association;
-import org.babyfish.jimmer.sql.meta.Column;
-import org.babyfish.jimmer.sql.meta.IdGenerator;
-import org.babyfish.jimmer.sql.meta.MiddleTable;
+import org.babyfish.jimmer.sql.meta.*;
 import org.babyfish.jimmer.impl.util.StaticCache;
 
 import java.lang.annotation.Annotation;
@@ -34,6 +33,8 @@ public class AssociationType implements ImmutableType {
     private final AssociationProp targetProp;
 
     private final Map<String, ImmutableProp> props;
+
+    private final Map<String, List<ImmutableProp>> chainMap;
 
     public static AssociationType of(ImmutableProp prop) {
         return CACHE.get(prop);
@@ -72,6 +73,12 @@ public class AssociationType implements ImmutableType {
         map.put(sourceProp.getName(), sourceProp);
         map.put(targetProp.getName(), targetProp);
         props = Collections.unmodifiableMap(map);
+
+        Map<String, List<ImmutableProp>> chainMap = new LinkedHashMap<>();
+        for (ImmutableProp prop : props.values()) {
+            PropChains.addInto(prop, chainMap);
+        }
+        this.chainMap = Collections.unmodifiableMap(chainMap);
     }
 
     public ImmutableProp getBaseProp() {
@@ -119,6 +126,11 @@ public class AssociationType implements ImmutableType {
     }
 
     @Override
+    public boolean isEmbeddable() {
+        return false;
+    }
+
+    @Override
     public Annotation getImmutableAnnotation() { return null; }
 
     @Override
@@ -162,31 +174,18 @@ public class AssociationType implements ImmutableType {
     }
 
     @Override
-    public ImmutableProp getPropByColumnName(String columnName) {
-        String scName = DatabaseIdentifiers.standardIdentifier(columnName);
-        if (scName.equals(
-                DatabaseIdentifiers.standardIdentifier(
-                        sourceProp.<Column>getStorage().getName()
-                )
-            )
-        ) {
-            return sourceProp;
+    public List<ImmutableProp> getPropChainByColumnName(String columnName) {
+        List<ImmutableProp> chain = chainMap.get(DatabaseIdentifiers.comparableIdentifier(columnName));
+        if (chain == null) {
+            throw new IllegalArgumentException(
+                    "There is no property whose column name is \"" +
+                            columnName +
+                            "\" in type \"" +
+                            this +
+                            "\""
+            );
         }
-        if (scName.equals(
-                DatabaseIdentifiers.standardIdentifier(
-                        targetProp.<Column>getStorage().getName()
-                )
-            )
-        ) {
-            return targetProp;
-        }
-        throw new IllegalArgumentException(
-                "There is no property whose column name is \"" +
-                        columnName +
-                        "\" in type \"" +
-                        this +
-                        "\""
-        );
+        return chain;
     }
 
     @Override

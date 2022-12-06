@@ -1,10 +1,8 @@
 package org.babyfish.jimmer.sql.ast.impl.mutation;
 
-import org.babyfish.jimmer.Draft;
 import org.babyfish.jimmer.ImmutableObjects;
 import org.babyfish.jimmer.meta.ImmutableProp;
 import org.babyfish.jimmer.runtime.DraftContext;
-import org.babyfish.jimmer.runtime.ImmutableSpi;
 import org.babyfish.jimmer.sql.JSqlClient;
 import org.babyfish.jimmer.sql.event.Triggers;
 
@@ -35,10 +33,12 @@ class MutationTrigger {
                     EntityChangedData data = (EntityChangedData) changedData;
                     data.newEntity = ctx.resolveObject(data.newEntity);
                 }
-//                if (changedData instanceof AssociationChangedData) {
-//                    AssociationChangedData data = (AssociationChangedData) changedData;
-//
-//                }
+                if (changedData instanceof AssociationChangedData) {
+                    AssociationChangedData data = (AssociationChangedData) changedData;
+                    data.sourceId = ctx.resolveObject(data.sourceId);
+                    data.detachedTargetId = ctx.resolveObject(data.detachedTargetId);
+                    data.attachedTargetId = ctx.resolveObject(data.attachedTargetId);
+                }
             }
         }
     }

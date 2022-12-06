@@ -1,3 +1,8 @@
+drop table order_item_product_mapping if exists;
+drop table product if exists;
+drop table order_item if exists;
+drop table order_ if exists;
+drop table transform if exists;
 drop table permission if exists;
 drop table administrator_role_mapping if exists;
 drop table role if exists;
@@ -331,3 +336,120 @@ insert into permission(id, name, role_id, deleted, created_time, modified_time)
     (2000, 'p_2', 100, true, '2022-10-03 00:00:00', '2022-10-03 00:10:00'),
     (3000, 'p_3', 200, false, '2022-10-03 00:00:00', '2022-10-03 00:10:00'),
     (4000, 'p_4', 200, true, '2022-10-03 00:00:00', '2022-10-03 00:10:00');
+
+
+create table transform(
+    id bigint not null,
+    `left` bigint not null,
+    top bigint not null,
+    `right` bigint not null,
+    bottom bigint not null,
+    target_left bigint,
+    target_top bigint,
+    target_right bigint,
+    target_bottom bigint
+);
+
+alter table transform
+    add constraint pk_transform
+        primary key(id);
+
+insert into transform(
+    id, `left`, top, `right`, bottom,
+    target_left, target_top, target_right, target_bottom
+) values
+    (1, 100, 120, 400, 320, 800, 600, 1400, 1000),
+    (2, 150, 170, 450, 370, null, null, null, null);
+
+
+
+
+create table order_(
+    order_x varchar(10) not null,
+    order_y varchar(10) not null,
+    name varchar(20) not null
+);
+alter table order_
+    add constraint pk_order
+        primary key(order_x, order_y);
+
+create table order_item(
+    order_item_a int not null,
+    order_item_b int not null,
+    order_item_c int not null,
+    name varchar(20) not null,
+    fk_order_x varchar(10),
+    fk_order_y varchar(10)
+);
+alter table order_item
+    add constraint pk_order_item
+        primary key(order_item_a, order_item_b, order_item_c);
+alter table order_item
+    add constraint fk_order_item
+        foreign key(fk_order_x, fk_order_y)
+            references order_(order_x, order_y)
+                on delete cascade;
+
+create table product(
+    product_alpha varchar(10) not null,
+    product_beta varchar(10) not null,
+    name varchar(20) not null
+);
+alter table product
+    add constraint pk_product
+        primary key(product_alpha, product_beta);
+
+create table order_item_product_mapping(
+    fk_order_item_a int not null,
+    fk_order_item_b int not null,
+    fk_order_item_c int not null,
+    fk_product_alpha varchar(10) not null,
+    fk_product_beta varchar(10) not null
+);
+alter table order_item_product_mapping
+    add constraint pk_order_item_product_mapping
+        primary key(
+            fk_order_item_a,
+            fk_order_item_b,
+            fk_order_item_c,
+            fk_product_alpha,
+            fk_product_beta
+        );
+alter table order_item_product_mapping
+    add constraint fk_order_item_product_mapping_source
+        foreign key(fk_order_item_a, fk_order_item_b, fk_order_item_c)
+            references order_item(order_item_a, order_item_b, order_item_c)
+                on delete cascade;
+alter table order_item_product_mapping
+    add constraint fk_order_item_product_mapping_target
+        foreign key(fk_product_alpha, fk_product_beta)
+            references product(product_alpha, product_beta)
+                on delete cascade;
+
+
+
+insert into order_(order_x, order_y, name) values
+    ('001', '001', 'order-1'),
+    ('001', '002', 'order-2');
+
+insert into order_item(order_item_a, order_item_b, order_item_c, name, fk_order_x, fk_order_y) values
+    (1, 1, 1, 'order-item-1-1', '001', '001'),
+    (1, 1, 2, 'order-item-1-2', '001', '001'),
+    (1, 2, 1, 'order-item-2-1', '001', '002'),
+    (2, 1, 1, 'order-item-2-2', '001', '002'),
+    (9, 9, 9, 'order-item-X-X', null, null);
+
+insert into product(product_alpha, product_beta, name) values
+    ('00A', '00A', 'Car'),
+    ('00A', '00B', 'Boat'),
+    ('00B', '00A', 'Bike');
+
+insert into order_item_product_mapping(fk_order_item_a, fk_order_item_b, fk_order_item_c, fk_product_alpha, fk_product_beta) values
+    (1, 1, 1, '00A', '00A'),
+    (1, 1, 1, '00B', '00A'),
+    (1, 1, 2, '00A', '00B'),
+    (1, 1, 2, '00A', '00A'),
+    (1, 2, 1, '00B', '00A'),
+    (1, 2, 1, '00A', '00B'),
+    (2, 1, 1, '00A', '00B'),
+    (2, 1, 1, '00B', '00A');

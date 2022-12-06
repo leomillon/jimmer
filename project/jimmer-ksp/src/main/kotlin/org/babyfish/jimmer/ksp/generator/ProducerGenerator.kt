@@ -2,9 +2,9 @@ package org.babyfish.jimmer.ksp.generator
 
 import com.squareup.kotlinpoet.*
 import com.squareup.kotlinpoet.ParameterizedTypeName.Companion.parameterizedBy
-import org.babyfish.jimmer.ksp.fullName
 import org.babyfish.jimmer.ksp.meta.ImmutableProp
 import org.babyfish.jimmer.ksp.meta.ImmutableType
+import org.babyfish.jimmer.sql.*
 
 class ProducerGenerator(
     private val type: ImmutableType,
@@ -72,22 +72,21 @@ class ProducerGenerator(
     }
 
     private fun CodeBlock.Builder.addProp(prop: ImmutableProp) {
-        val fullName = prop.primarySqlAnnotation?.fullName
         when {
-            fullName == ID_FULL_NAME ->
+            prop.primaryAnnotationType == Id::class.java ->
                 add(
                     ".id(%L, %S, %T::class.java)\n",
                     prop.id,
                     prop.name,
                     prop.targetTypeName(overrideNullable = false)
                 )
-            fullName == VERSION_FULL_NAME ->
+            prop.primaryAnnotationType == Version::class.java ->
                 add(
                     ".version(%L, %S)\n",
                     prop.id,
                     prop.name
                 )
-            prop.isKey && prop.isAssociation ->
+            prop.isKey && prop.isAssociation(false) ->
                 add(
                     ".keyReference(%L, %S, %T::class.java, %L)\n",
                     prop.id,
@@ -95,24 +94,24 @@ class ProducerGenerator(
                     prop.targetTypeName(overrideNullable = false),
                     prop.isNullable
                 )
-            prop.isKey && !prop.isAssociation ->
+            prop.isKey && !prop.isAssociation(false) ->
                 add(
                     ".key(%L, %S, %T::class.java)\n",
                     prop.id,
                     prop.name,
                     prop.targetTypeName(overrideNullable = false)
                 )
-            fullName !== null ->
+            prop.primaryAnnotationType !== null && prop.primaryAnnotationType != Transient::class.java ->
                 add(
                     ".add(%L, %S, %T::class.java, %T::class.java, %L)\n",
                     prop.id,
                     prop.name,
-                    when (fullName) {
-                        ONE_TO_ONE_FULL_NAME -> ONE_TO_ONE_CLASS_NAME
-                        MANY_TO_ONE_FULL_NAME -> MANY_TO_ONE_CLASS_NAME
-                        ONE_TO_MANY_FULL_NAME -> ONE_TO_MANY_CLASS_NAME
-                        MANY_TO_MANY_FULL_NAME -> MANY_TO_MANY_CLASS_NAME
-                        else -> error("Internal bug: $prop has not wrong sql annotation @$fullName")
+                    when {
+                        prop.primaryAnnotationType == OneToOne::class.java -> ONE_TO_ONE_CLASS_NAME
+                        prop.primaryAnnotationType == ManyToOne::class.java -> MANY_TO_ONE_CLASS_NAME
+                        prop.primaryAnnotationType == OneToMany::class.java -> ONE_TO_MANY_CLASS_NAME
+                        prop.primaryAnnotationType == ManyToMany::class.java -> MANY_TO_MANY_CLASS_NAME
+                        else -> error("Internal bug: $prop has wrong sql annotation @${prop.primaryAnnotationType.name}")
                     },
                     prop.targetTypeName(overrideNullable = false),
                     prop.isNullable
@@ -124,9 +123,9 @@ class ProducerGenerator(
                     prop.name,
                     IMMUTABLE_PROP_CATEGORY_CLASS_NAME,
                     when {
-                        prop.isList && prop.isAssociation -> "REFERENCE_LIST"
-                        prop.isList && !prop.isAssociation -> "SCALAR_LIST"
-                        prop.isAssociation -> "REFERENCE"
+                        prop.isList && prop.isAssociation(false) -> "REFERENCE_LIST"
+                        prop.isList && !prop.isAssociation(false) -> "SCALAR_LIST"
+                        prop.isAssociation(false) -> "REFERENCE"
                         else -> "SCALAR"
                     },
                     prop.targetTypeName(overrideNullable = false),
