@@ -5,7 +5,6 @@ plugins {
 }
 
 group = "org.babyfish.jimmer"
-version = "0.5.14"
 
 repositories {
     mavenCentral()
