@@ -38,6 +38,13 @@ tasks.getByName<Test>("test") {
     useJUnitPlatform()
 }
 
+tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile> {
+    kotlinOptions {
+        freeCompilerArgs = listOf("-Xjsr305=strict", "-Xjvm-default=all")
+        jvmTarget = "1.8"
+    }
+}
+
 // Publish to maven-----------------------------------------------------
 val NEXUS_USERNAME: String by project
 val NEXUS_PASSWORD: String by project
