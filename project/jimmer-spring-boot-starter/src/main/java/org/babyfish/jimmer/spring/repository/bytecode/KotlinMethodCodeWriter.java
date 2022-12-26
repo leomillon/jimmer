@@ -8,8 +8,27 @@ import java.lang.reflect.Modifier;
 
 public class KotlinMethodCodeWriter extends MethodCodeWriter {
 
-    protected KotlinMethodCodeWriter(ClassCodeWriter parent, Method method) {
-        super(parent, method);
+    protected KotlinMethodCodeWriter(ClassCodeWriter parent, Method method, String id) {
+        super(parent, method, id);
+    }
+
+    @Override
+    protected void visitLoadJSqlClient() {
+        mv.visitVarInsn(Opcodes.ALOAD, 0);
+        mv.visitMethodInsn(
+                Opcodes.INVOKEVIRTUAL,
+                K_REPOSITORY_IMPL,
+                "getSql",
+                "()" + K_SQL_CLIENT_DESCRIPTOR,
+                false
+        );
+        mv.visitMethodInsn(
+                Opcodes.INVOKEINTERFACE,
+                K_SQL_CLIENT_INTERNAL_NAME,
+                "getJavaClient",
+                "()" + J_SQL_CLIENT_DESCRIPTOR,
+                true
+        );
     }
 
     @Override
@@ -17,17 +36,12 @@ public class KotlinMethodCodeWriter extends MethodCodeWriter {
         if (method.isDefault()) {
             return;
         }
-        Method defaultMethod = findDefaultMethod();
+        Method defaultMethod = getDefaultImplMethod();
         if (defaultMethod != null) {
             writeDefaultInvocation(defaultMethod);
             return;
         }
-        throw new IllegalStateException(
-                "The current version does not support spring-data-style abstract custom method \"" +
-                        method +
-                        "\", please wait for the next version. " +
-                        "Now, you can write strongly typed DSL using java-default method."
-        );
+        super.write();
     }
 
     private void writeDefaultInvocation(Method defaultMethod) {
@@ -39,7 +53,7 @@ public class KotlinMethodCodeWriter extends MethodCodeWriter {
                 null
         );
         mv.visitCode();
-        VarLoader loader = new VarLoader(mv, 0);
+        VarLoader loader = new VarLoader(0);
         for (Class<?> type : defaultMethod.getParameterTypes()) {
             loader.load(type);
         }
@@ -55,7 +69,8 @@ public class KotlinMethodCodeWriter extends MethodCodeWriter {
         mv.visitEnd();
     }
 
-    private Method findDefaultMethod() {
+    @Override
+    protected Method onGetDefaultImplMethod() {
         Class<?> repositoryInterface = parent.getMetadata().getRepositoryInterface();
         Class<?> defaultImpl = null;
         for (Class<?> nestedClass : repositoryInterface.getClasses()) {

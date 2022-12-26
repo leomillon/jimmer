@@ -6,10 +6,31 @@ import org.babyfish.jimmer.sql.ast.Predicate;
 import org.babyfish.jimmer.sql.fetcher.Fetcher;
 import org.jetbrains.annotations.Nullable;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+
+import java.math.BigDecimal;
+import java.util.List;
 
 public interface BookRepository extends JRepository<Book, Long> {
 
     BookTable table = BookTable.$;
+
+    List<Book> findByNameOrderByNameAscEditionDesc(
+            @Nullable String name,
+            @Nullable Fetcher<Book> fetcher
+    );
+
+    Page<Book> findByNameLikeIgnoreCaseAndStoreNameOrderByNameAscEditionDesc(
+            Pageable pageable,
+            @Nullable Fetcher<Book> fetcher,
+            @Nullable String name,
+            @Nullable String storeName
+    );
+
+    List<BigDecimal> findDistinctPriceByPriceBetween(
+            @Nullable BigDecimal min,
+            @Nullable BigDecimal max
+    );
 
     default Page<Book> findBooks(
             int pageIndex,
